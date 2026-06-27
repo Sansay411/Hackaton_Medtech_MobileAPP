@@ -1,0 +1,10 @@
+{
+  "name": "Remix: MedTariff.kz",
+  "description": "Сравнение цен на медицинские услуги в Казахстане с поддержкой ОСМС, интерактивной картой и ИИ-аналитикой тарифов.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

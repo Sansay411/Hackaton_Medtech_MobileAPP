@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile with city, onboarding status, and preferred intent",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "city": { "type": "string" },
+        "intent": { "type": "string" },
+        "phone": { "type": "string" },
+        "lastLogin": { "type": "string" },
+        "isOnboarded": { "type": "boolean" },
+        "onboardedAt": { "type": "string" }
+      },
+      "required": ["uid"]
+    },
+    "SearchHistory": {
+      "title": "Search History Item",
+      "description": "Historical search parameters for tariff optimization",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "query": { "type": "string" },
+        "city": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "clinicsCount": { "type": "number" }
+      },
+      "required": ["userId", "query", "city", "timestamp"]
+    },
+    "Appointment": {
+      "title": "Appointment Booking",
+      "description": "User appointment with clinic, service, selected date/time, and patient info",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "patientName": { "type": "string" },
+        "serviceName": { "type": "string" },
+        "clinicName": { "type": "string" },
+        "clinicId": { "type": "string" },
+        "price": { "type": "number" },
+        "tariff": { "type": "string" },
+        "date": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "patientName", "serviceName", "clinicName", "date", "phone"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documentation"
+    },
+    "/searchHistory/{historyId}": {
+      "schema": "SearchHistory",
+      "description": "Search query and result analytics history"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "User clinic appointments and bookings"
+    }
+  }
+}
