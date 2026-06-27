@@ -3,7 +3,7 @@
 ---
 
 <div align="center">
-  <img src="Логотип%20продукта.jpg" width="180" alt="MedTariff Logo" />
+  <img src="assets/logo.jpg" width="180" alt="MedTariff Logo" />
 </div>
 
 <div align="center">

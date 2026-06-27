@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import XLSX from "xlsx";
+// @ts-ignore
 import pdf from "pdf-parse";
 import mammoth from "mammoth";
 import https from "https";
