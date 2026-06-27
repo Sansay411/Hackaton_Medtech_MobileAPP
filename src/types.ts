@@ -9,6 +9,8 @@ export interface Clinic {
   updated: string;
   phone: string;
   rating: number;
+  anomalous_inflation?: boolean;
+  parsedAt?: string;
 }
 
 export interface MapMarker {
@@ -19,6 +21,7 @@ export interface MapMarker {
   lng: number;
   address: string;
   osms: boolean;
+  rating?: number;
 }
 
 export interface OnboardingState {

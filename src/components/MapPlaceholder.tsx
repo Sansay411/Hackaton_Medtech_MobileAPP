@@ -279,6 +279,153 @@ function RouteDisplay({ origin, destination, onRouteComputed }: RouteDisplayProp
   return null;
 }
 
+const getBrandConfig = (name: string) => {
+  const lower = name.toLowerCase();
+  if (lower.includes("олимп") || lower.includes("olymp")) {
+    return {
+      bg: "bg-gradient-to-br from-emerald-500 to-teal-600",
+      text: "text-white font-black",
+      char: "О",
+      accent: "border-emerald-200 shadow-emerald-100"
+    };
+  }
+  if (lower.includes("инвиво") || lower.includes("invivo")) {
+    return {
+      bg: "bg-gradient-to-br from-cyan-400 to-indigo-500",
+      text: "text-white font-black",
+      char: "И",
+      accent: "border-cyan-200 shadow-cyan-100"
+    };
+  }
+  if (lower.includes("сункар") || lower.includes("sunkar")) {
+    return {
+      bg: "bg-gradient-to-br from-amber-400 to-orange-500",
+      text: "text-white font-black",
+      char: "С",
+      accent: "border-amber-200 shadow-amber-100"
+    };
+  }
+  if (lower.includes("orhun") || lower.includes("орхун")) {
+    return {
+      bg: "bg-gradient-to-br from-rose-500 to-red-600",
+      text: "text-white font-black",
+      char: "О",
+      accent: "border-rose-200 shadow-rose-100"
+    };
+  }
+  if (lower.includes("хак") || lower.includes("hak")) {
+    return {
+      bg: "bg-gradient-to-br from-blue-500 to-indigo-600",
+      text: "text-white font-black",
+      char: "Х",
+      accent: "border-blue-200 shadow-blue-100"
+    };
+  }
+  if (lower.includes("керуен") || lower.includes("keruen")) {
+    return {
+      bg: "bg-gradient-to-br from-purple-500 to-fuchsia-600",
+      text: "text-white font-black",
+      char: "К",
+      accent: "border-purple-200 shadow-purple-100"
+    };
+  }
+  return {
+    bg: "bg-gradient-to-br from-slate-400 to-slate-600",
+    text: "text-white font-semibold",
+    char: name.charAt(0).toUpperCase() || "М",
+    accent: "border-indigo-200 shadow-indigo-100"
+  };
+};
+
+export const renderBrandLogo = (name: string, sizeClass = "w-8.5 h-8.5 rounded-xl") => {
+  const lower = name.toLowerCase();
+  
+  if (lower.includes("олимп") || lower.includes("olymp")) {
+    return (
+      <div className={`${sizeClass} bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-xs shrink-0 relative overflow-hidden transition-transform`}>
+        <svg className="w-5 h-5 text-emerald-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.2)" />
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" fill="rgba(255,255,255,0.15)" />
+          <path d="M2 12h20" stroke="rgba(255,255,255,0.2)" />
+        </svg>
+        <span className="absolute text-[8px] font-black tracking-tighter text-white drop-shadow-xs">Олимп</span>
+      </div>
+    );
+  }
+  
+  if (lower.includes("инвиво") || lower.includes("invivo")) {
+    return (
+      <div className={`${sizeClass} bg-gradient-to-br from-cyan-400 to-indigo-500 text-white flex items-center justify-center shadow-xs shrink-0 relative overflow-hidden transition-transform`}>
+        <svg className="w-5 h-5 text-cyan-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M4.5 10.5C4.5 10.5 7.5 4.5 12 4.5C16.5 4.5 19.5 10.5 19.5 10.5C19.5 10.5 16.5 16.5 12 16.5C7.5 16.5 4.5 10.5 4.5 10.5Z" stroke="rgba(255,255,255,0.25)" />
+          <circle cx="12" cy="10.5" r="3" fill="white" />
+          <path d="M12 13.5v6M10 16.5h4" />
+        </svg>
+        <span className="absolute bottom-0.5 text-[6.5px] font-black uppercase tracking-widest text-white/90">Invivo</span>
+      </div>
+    );
+  }
+  
+  if (lower.includes("сункар") || lower.includes("sunkar")) {
+    return (
+      <div className={`${sizeClass} bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center shadow-xs shrink-0 relative overflow-hidden transition-transform`}>
+        <svg className="w-5 h-5 text-amber-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.2)" />
+          <path d="M12 12V2a10 10 0 0 1 10 10H12Z" fill="white" />
+          <path d="M12 12H2a10 10 0 0 1 10-10v10Z" fill="rgba(255,255,255,0.5)" />
+          <path d="M12 12v10a10 10 0 0 1-10-10h10Z" fill="rgba(255,255,255,0.2)" />
+        </svg>
+        <span className="absolute bottom-0.5 text-[6.5px] font-black uppercase tracking-widest text-white/95">Сункар</span>
+      </div>
+    );
+  }
+  
+  if (lower.includes("orhun") || lower.includes("орхун")) {
+    return (
+      <div className={`${sizeClass} bg-gradient-to-br from-rose-500 to-red-600 text-white flex items-center justify-center shadow-xs shrink-0 relative overflow-hidden transition-transform`}>
+        <svg className="w-5 h-5 text-rose-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2v20M2 12h20" strokeWidth="3" />
+          <circle cx="12" cy="12" r="6" stroke="white" strokeWidth="2" fill="none" />
+        </svg>
+        <span className="absolute bottom-0.5 text-[6px] font-black uppercase tracking-widest text-white/90">Orhun</span>
+      </div>
+    );
+  }
+  
+  if (lower.includes("хак") || lower.includes("hak")) {
+    return (
+      <div className={`${sizeClass} bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0 relative overflow-hidden transition-transform`}>
+        <svg className="w-5 h-5 text-blue-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="rgba(255,255,255,0.15)" />
+          <path d="M12 8v8M8 12h8" stroke="white" strokeWidth="3" />
+        </svg>
+        <span className="absolute bottom-0.5 text-[7px] font-black uppercase tracking-widest text-white/90">ХАК</span>
+      </div>
+    );
+  }
+  
+  if (lower.includes("керуен") || lower.includes("keruen")) {
+    return (
+      <div className={`${sizeClass} bg-gradient-to-br from-purple-500 to-fuchsia-600 text-white flex items-center justify-center shadow-xs shrink-0 relative overflow-hidden transition-transform`}>
+        <svg className="w-5 h-5 text-purple-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2L2 22h20L12 2z" fill="rgba(255,255,255,0.15)" />
+          <circle cx="12" cy="13" r="4" fill="white" />
+        </svg>
+        <span className="absolute bottom-0.5 text-[6px] font-black uppercase tracking-widest text-white/90">Керуен</span>
+      </div>
+    );
+  }
+  
+  return (
+    <div className={`${sizeClass} bg-gradient-to-br from-slate-500 to-slate-700 text-white flex items-center justify-center shadow-xs shrink-0 relative overflow-hidden transition-transform`}>
+      <svg className="w-4.5 h-4.5 text-slate-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+      </svg>
+      <span className="absolute bottom-0.5 text-[6.5px] font-black uppercase tracking-widest text-white/90">Клиника</span>
+    </div>
+  );
+};
+
 export default function MapPlaceholder({
   markers,
   activeMarkerId,
@@ -294,9 +441,9 @@ export default function MapPlaceholder({
   const mapRef = useRef<google.maps.Map | null>(null);
 
   // Fallback coordinates for Kazakhstan cities
-  const isAstana = city.toLowerCase().includes("астана");
-  const isShymkent = city.toLowerCase().includes("шымкент");
-  const isKaraganda = city.toLowerCase().includes("караганда");
+  const isAstana = city?.toLowerCase()?.includes("астана") || false;
+  const isShymkent = city?.toLowerCase()?.includes("шымкент") || false;
+  const isKaraganda = city?.toLowerCase()?.includes("караганда") || false;
 
   const cityCenter = isAstana
     ? { lat: 51.169392, lng: 71.449074 }
@@ -443,6 +590,8 @@ export default function MapPlaceholder({
                   .trim()
               : "Клиника";
 
+            const displayRating = marker.rating || 4.5;
+
             return (
               <AdvancedMarker
                 key={marker.id}
@@ -451,60 +600,50 @@ export default function MapPlaceholder({
               >
                 <div className="relative flex flex-col items-center group cursor-pointer select-none">
                   
-                  {/* Hover or Active Clinic Details Tooltip */}
-                  <div
-                    className={`absolute -top-11 px-2.5 py-1 bg-slate-900/95 backdrop-blur-sm text-white rounded-xl text-[10px] font-bold shadow-lg border border-slate-700/50 transition-all duration-200 pointer-events-none whitespace-nowrap z-50 flex items-center gap-1.5 ${
-                      isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1.5 group-hover:opacity-100 group-hover:translate-y-0"
-                    }`}
-                  >
-                    <span>{marker.name}</span>
-                    {marker.osms && (
-                      <span className="bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 rounded-md font-extrabold font-mono uppercase tracking-wide">
-                        ОСМС
-                      </span>
-                    )}
-                  </div>
+                  {/* Glowing Pulse Backdrop for Selected Clinic */}
+                  {isActive && (
+                    <span className="absolute -inset-1.5 rounded-3xl opacity-20 animate-ping bg-[#1B449C]" />
+                  )}
 
-                  {/* Marker Pin Visual Container - Smooth Glowing Purple Pills */}
-                  <div className="relative flex items-center justify-center">
+                  {/* Polished interactive clinic card */}
+                  <div className={`flex items-center gap-2.5 bg-white rounded-2xl p-2 shadow-lg border transition-all duration-300 w-52 text-left ${
+                    isActive 
+                      ? "border-[#1B449C] ring-4 ring-indigo-100/50 scale-110 z-40" 
+                      : "border-slate-200 hover:border-slate-300 hover:scale-105 z-10 shadow-sm"
+                  }`}>
+                    {/* Left: Brand Icon with neat background */}
+                    {renderBrandLogo(marker.name, "w-8.5 h-8.5 rounded-xl")}
                     
-                    {/* Animated Purple/Indigo Ripple Glow for Active/Selected Clinic */}
-                    {isActive && (
-                      <span className="absolute w-16 h-16 rounded-full opacity-40 animate-ping bg-purple-500" />
-                    )}
-
-                    {/* Glowing Purple Pill containing typography */}
-                    <div
-                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full shadow-lg transition-all duration-300 ${
-                        isActive
-                          ? "bg-gradient-to-r from-indigo-600 to-purple-700 text-white scale-115 ring-2 ring-purple-300 shadow-purple-500/50 z-30"
-                          : "bg-white text-indigo-950 hover:bg-indigo-50 border border-purple-200 hover:scale-105 shadow-2xs z-10"
-                      }`}
-                    >
-                      {/* Clinic Initials Badge or Pin icon */}
-                      <div
-                        className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black shrink-0 ${
-                          isActive ? "bg-white/25 text-white" : "bg-indigo-100 text-indigo-700"
-                        }`}
-                      >
-                        {simplifiedName.charAt(0) || "K"}
+                    {/* Middle: Brand name, price, and free OSMS badge if eligible */}
+                    <div className="flex-1 min-w-0 leading-tight">
+                      <div className="text-[8.5px] font-black text-slate-400 truncate uppercase tracking-tight leading-none">
+                        {simplifiedName}
                       </div>
-
-                      {/* Info & Price Section */}
-                      <div className="flex flex-col text-left leading-none">
-                        <span className="text-[10px] font-black font-mono whitespace-nowrap">
-                          {marker.price.toLocaleString()} ₸
+                      <div className="text-[12px] font-black text-slate-800 font-mono leading-none mt-1">
+                        {marker.price.toLocaleString()} ₸
+                      </div>
+                      {marker.osms && (
+                        <span className="inline-block bg-emerald-50 text-emerald-700 text-[6.5px] font-black font-mono tracking-wider px-1 py-0.5 rounded uppercase mt-1">
+                          ОСМС
                         </span>
-                      </div>
+                      )}
+                    </div>
+
+                    {/* Right: Gold Star numeric rating */}
+                    <div className="flex items-center gap-0.5 bg-amber-50 border border-amber-100/70 px-1.5 py-0.5 rounded-lg shrink-0 self-start">
+                      <span className="text-amber-500 text-[10px] leading-none">★</span>
+                      <span className="text-amber-800 text-[9px] font-black leading-none">
+                        {displayRating.toFixed(1)}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Pin stem pointer */}
+                  {/* Bubble Pointer Stem */}
                   <div
-                    className={`w-2 h-2 rotate-45 -mt-1 border-r border-b shadow-xs transition-colors duration-300 ${
+                    className={`w-2.5 h-2.5 rotate-45 -mt-1 border-r border-b shadow-xs transition-colors duration-300 ${
                       isActive
-                        ? "bg-purple-700 border-purple-800"
-                        : "bg-white border-purple-200"
+                        ? "bg-white border-[#1B449C]"
+                        : "bg-white border-slate-200"
                     }`}
                   />
                 </div>

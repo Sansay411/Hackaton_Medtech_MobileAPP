@@ -50,6 +50,41 @@
         "createdAt": { "type": "string" }
       },
       "required": ["userId", "patientName", "serviceName", "clinicName", "date", "phone"]
+    },
+    "ClinicDoc": {
+      "title": "Clinic Details",
+      "description": "Information about a real clinic or lab",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "rating": { "type": "number" },
+        "address": { "type": "string" },
+        "district": { "type": "string" },
+        "city": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "phone": { "type": "string" },
+        "osms": { "type": "boolean" }
+      },
+      "required": ["id", "name", "city"]
+    },
+    "ServiceDoc": {
+      "title": "Service Tariffs",
+      "description": "Official medical service code, title, and tariffs in a city",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "city": { "type": "string" },
+        "minPrice": { "type": "number" },
+        "averagePrice": { "type": "number" },
+        "clinicPrices": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "city"]
     }
   },
   "firestore": {
@@ -64,6 +99,14 @@
     "/appointments/{appointmentId}": {
       "schema": "Appointment",
       "description": "User clinic appointments and bookings"
+    },
+    "/clinics/{clinicId}": {
+      "schema": "ClinicDoc",
+      "description": "Clinics registered and matched via live searches"
+    },
+    "/services/{serviceId}": {
+      "schema": "ServiceDoc",
+      "description": "Aggregated tariffs for a medical service in a city"
     }
   }
 }

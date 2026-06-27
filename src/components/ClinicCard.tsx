@@ -1,6 +1,58 @@
 import React from "react";
 import { CheckCircle2, Phone, Star, MapPin, RefreshCw } from "lucide-react";
 import { Clinic } from "../types";
+import { renderBrandLogo } from "./MapPlaceholder";
+
+const getBrandConfig = (name: string) => {
+  const lower = name.toLowerCase();
+  if (lower.includes("олимп") || lower.includes("olymp")) {
+    return {
+      bg: "bg-gradient-to-br from-emerald-500 to-teal-600",
+      text: "text-white font-black",
+      char: "О",
+    };
+  }
+  if (lower.includes("инвиво") || lower.includes("invivo")) {
+    return {
+      bg: "bg-gradient-to-br from-cyan-400 to-indigo-500",
+      text: "text-white font-black",
+      char: "И",
+    };
+  }
+  if (lower.includes("сункар") || lower.includes("sunkar")) {
+    return {
+      bg: "bg-gradient-to-br from-amber-400 to-orange-500",
+      text: "text-white font-black",
+      char: "С",
+    };
+  }
+  if (lower.includes("orhun") || lower.includes("орхун")) {
+    return {
+      bg: "bg-gradient-to-br from-rose-500 to-red-600",
+      text: "text-white font-black",
+      char: "О",
+    };
+  }
+  if (lower.includes("хак") || lower.includes("hak")) {
+    return {
+      bg: "bg-gradient-to-br from-blue-500 to-indigo-600",
+      text: "text-white font-black",
+      char: "Х",
+    };
+  }
+  if (lower.includes("керуен") || lower.includes("keruen")) {
+    return {
+      bg: "bg-gradient-to-br from-purple-500 to-fuchsia-600",
+      text: "text-white font-black",
+      char: "К",
+    };
+  }
+  return {
+    bg: "bg-gradient-to-br from-slate-400 to-slate-600",
+    text: "text-white font-semibold",
+    char: name.charAt(0).toUpperCase() || "М",
+  };
+};
 
 interface ClinicCardProps {
   clinic: Clinic;
@@ -19,6 +71,8 @@ export default function ClinicCard({
   onCardClick,
   serviceQuery,
 }: ClinicCardProps) {
+  const brand = getBrandConfig(clinic.name);
+
   return (
     <div
       id={`clinic-card-${clinic.id}`}
@@ -32,15 +86,20 @@ export default function ClinicCard({
       {/* Top Section */}
       <div>
         <div className="flex items-start justify-between gap-3 mb-2">
-          <div className="min-w-0">
-            {/* Bold Service Naming */}
-            <span className="text-[10px] text-indigo-600 font-extrabold uppercase tracking-widest block leading-none mb-1">
-              {serviceQuery || "Медицинская услуга"}
-            </span>
-            {/* Clinic Brand Label */}
-            <h4 className="font-sans font-black text-slate-800 text-sm group-hover:text-indigo-900 transition-colors truncate">
-              {clinic.name}
-            </h4>
+          <div className="flex items-center gap-3 min-w-0">
+            {/* Beautiful brand logo */}
+            {renderBrandLogo(clinic.name, "w-10 h-10 rounded-2xl")}
+            
+            <div className="min-w-0">
+              {/* Bold Service Naming */}
+              <span className="text-[10px] text-indigo-600 font-extrabold uppercase tracking-widest block leading-none mb-1">
+                {serviceQuery || "Медицинская услуга"}
+              </span>
+              {/* Clinic Brand Label */}
+              <h4 className="font-sans font-black text-slate-800 text-sm group-hover:text-indigo-900 transition-colors truncate">
+                {clinic.name}
+              </h4>
+            </div>
           </div>
           
           {/* Emerald Green Tag "Доступно по ОСМС" */}
@@ -77,6 +136,18 @@ export default function ClinicCard({
             </div>
           )}
         </div>
+
+        {clinic.anomalous_inflation && (
+          <div className="mb-3 px-3 py-1.5 bg-red-50 border border-red-150 rounded-xl flex items-center gap-1.5 text-red-700 animate-pulse">
+            <span className="flex h-1.5 w-1.5 relative shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+            </span>
+            <span className="text-[9px] font-black uppercase tracking-wider leading-none">
+              Внимание: Выявлено завышение тарифа (+50% к медиане)
+            </span>
+          </div>
+        )}
 
         {/* Info list */}
         <div className="space-y-1.5 text-xs text-slate-500 pt-3 border-t border-slate-100/80">

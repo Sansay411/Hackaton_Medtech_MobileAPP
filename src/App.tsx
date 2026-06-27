@@ -14,6 +14,8 @@ import {
   TrendingDown, 
   ChevronRight, 
   ChevronDown,
+  ChevronLeft,
+  Database,
   SlidersHorizontal, 
   Map as MapIcon, 
   List as ListIcon, 
@@ -39,6 +41,7 @@ import {
   Briefcase,
   GraduationCap,
   Calendar,
+  Sun,
   Heart,
   Clock,
   Award,
@@ -46,13 +49,14 @@ import {
   Brain,
   Smile
 } from "lucide-react";
-import { onAuthStateChanged, auth, signOut, db, collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, handleFirestoreError, OperationType } from "./lib/firebase";
+import { onAuthStateChanged, auth, signOut, db, collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, setDoc, handleFirestoreError, OperationType } from "./lib/firebase";
 import { Clinic, MapMarker, OnboardingState } from "./types";
 import Logo from "./components/Logo";
 import Onboarding from "./components/Onboarding";
 import MapPlaceholder from "./components/MapPlaceholder";
 import ClinicCard from "./components/ClinicCard";
 import ComparisonMatrix from "./components/ComparisonMatrix";
+import AdminHub from "./components/AdminHub";
 
 interface RecentItem {
   id: string;
@@ -73,30 +77,33 @@ interface PromoCode {
 export const BLOG_ARTICLES = [
   {
     id: "art-1",
-    title: "Как сэкономить на МРТ и КТ по ОСМС в Казахстане",
+    title: "Как не сдохнуть в очереди к терапевту: 5 лайфхаков для поликлиник",
     category: "Лайфхаки ОСМС",
     readTime: "4 мин",
     date: "25 Июня, 2026",
-    excerpt: "Пошаговое руководство по получению бесплатных услуг дорогостоящей диагностики через вашу поликлинику.",
-    content: "Система ОСМС (Обязательное социальное медицинское страхование) позволяет гражданам Казахстана получать дорогостоящие исследования бесплатно.\n\nКак пройти исследование бесплатно по системе ОСМС:\n1. Запишитесь на прием к терапевту в своей поликлинике прикрепления.\n2. Подробно опишите ваши жалобы и симптомы, требующие детальной визуализации.\n3. Получите направление к профильному специалисту (невропатолог, травматолог, кардиолог).\n4. Профильный специалист выдает электронное направление на КТ/МРТ в рамках ОСМС.\n5. Важно! Вы имеете право выбрать ЛЮБУЮ клинику или лабораторию, которая является партнером ФСМС, даже если она частная! MedTariff поможет сравнить такие клиники и их расположение."
+    excerpt: "Простые секреты от бывалого врача, как пройти нужного специалиста за 15 минут вместо 2 часов ожидания в душном коридоре.",
+    imageUrl: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=80",
+    content: "Система поликлиник в Казахстане может казаться лабиринтом, но знание внутренних правил творит чудеса.\n\nВот 5 простых правил, которые сэкономят вам часы:\n1. Записывайтесь через мобильные приложения (Damumed или аналоги) ровно в 08:00 утра — именно тогда открываются новые слоты на день.\n2. Вы имеете право на бесплатный прием дежурного терапевта без предварительной записи, если у вас острая боль или температура.\n3. Пользуйтесь электронными рецептами и направлениями. Если врач обещал направить вас, проверьте статус направления прямо в приложении, не выходя из кабинета.\n4. Если нужного специалиста нет в вашей поликлинике, вас обязаны направить в частную клинику-партнер бесплатно по договору соисполнения. Требуйте такое направление у заведующего!\n5. Помните: по закону, если время вашего приема сдвинулось более чем на 30 минут по вине врача, вы можете обратиться к службе поддержки пациентов прямо в здании."
   },
   {
     id: "art-2",
-    title: "Фальшивые приписки Дамумед: как их найти и пожаловаться",
+    title: "Фальшивые приемы в Damumed: как найти скрытые приписки",
     category: "Права пациентов",
     readTime: "5 мин",
     date: "18 Июня, 2026",
-    excerpt: "Инструкция по поиску фиктивных записей о приемах врачей и процедурах, которые вам никогда не проводили.",
-    content: "Проблема фиктивных отчетов клиник перед государством («приписок») остается актуальной в Казахстане. Клиники отчитываются о ложных приемах пациентов, чтобы незаконно получить выплаты от ОСМС.\n\nКак обнаружить и заявить о приписке:\n1. Регулярно заглядывайте в личный кабинет Damumed или используйте инструмент контроля приписок в приложении MedTariff.\n2. Проверяйте вкладку «Мои записи» на наличие неизвестных приемов терапевта, УЗИ или анализов.\n3. Если вы обнаружили фейковый прием, не оставляйте это без внимания. Каждая приписка — это деньги налогоплательщиков, украденные из бюджета медицины.\n4. Нажмите кнопку «Пожаловаться» в MedTariff. Система автоматически подготовит и отправит жалобу в Министерство Здравоохранения и Фонд ОСМС. Будет инициирована проверка с последующим штрафом для клиники в размере 300% от стоимости услуги."
+    excerpt: "Пошаговая инструкция, как клиники зарабатывают миллионы тенге на вашем имени и как остановить медицинский фрод.",
+    imageUrl: "https://images.unsplash.com/photo-1526253038957-b254ffb31420?auto=format&fit=crop&w=600&q=80",
+    content: "Каждый месяц тысячи казахстанцев обнаруживают в Damumed записи о приемах, анализах и даже операциях, которых никогда не было. Это называется приписками — так недобросовестные клиники получают деньги от Фонда ОСМС за невыполненную работу.\n\nКак обнаружить фрод и защитить свои права:\n1. Зайдите в личный кабинет Damumed, найдите раздел «Мои записи» или историю приемов.\n2. Тщательно сверьте даты. Нашли прием стоматолога во время вашего отпуска? Это приписка.\n3. Нажмите кнопку «Жалоба» прямо в MedTariff. Мы автоматически сгенерируем текст обращения и отправим его в Фонд социального медстрахования.\n4. За каждую доказанную приписку клиника получает огромный штраф — до 300% стоимости услуги обратно в бюджет, а нарушителю грозит лишение лицензии."
   },
   {
     id: "art-3",
-    title: "Сравнение цен в лабораториях КДЛ Олимп и Invivo в 2026 году",
+    title: "Битва цен: Олимп против Invivo. Где дешевле сдавать анализы?",
     category: "Анализ цен",
     readTime: "3 мин",
     date: "10 Июня, 2026",
-    excerpt: "Где выгоднее сдавать анализы крови, гормоны и ПЦР тесты в Алматы и Астане.",
-    content: "Анализ рынка лабораторной диагностики в крупнейших городах РК показывает разницу тарифов до 35%.\n\nГлавные выводы исследования:\n- Базовый общий анализ крови (ОАК) выгоднее всего сдавать в КДЛ Олимп (около 2 200 ₸).\n- ПЦР тесты на вирусные инфекции и сложные гормональные исследования показывают лучшую цену в Invivo (около 6 000 ₸).\n- При заказе на сумму от 15 000 ₸ обе лаборатории предлагают бесплатный забор крови или акционные подарки.\n- Не забывайте сверять условия ОСМС: многие анализы входят в бесплатный пакет ГОБМП при выдаче направления в вашей поликлинике."
+    excerpt: "Мы сравнили стоимость 10 самых популярных анализов в Алматы и Астане и нашли скрытые комиссии. Результаты удивляют.",
+    imageUrl: "https://images.unsplash.com/photo-1579154204601-01588f351166?auto=format&fit=crop&w=600&q=80",
+    content: "Лабораторная диагностика — весомая статья расходов при лечении. Но цены в крупнейших сетях лабораторий существенно различаются.\n\nНаш независимый аудит цен показал следующие результаты:\n- Общий анализ крови (ОАК) с лейкоцитарной формулой выгоднее сдавать в КДЛ Олимп (в среднем дешевле на 15%).\n- ПЦР-тесты на вирусы и инфекции, а также сложные гормоны щитовидной железы выгоднее в Invivo.\n- Забор крови оплачивается отдельно в обеих сетях (около 800–1000 ₸). Обязательно учитывайте эту сумму при расчете.\n- Лайфхак: при оформлении заказа онлайн через сайты лабораторий часто действует постоянная скидка 5-10%!"
   }
 ];
 
@@ -112,7 +119,14 @@ export const BEST_DOCTORS = [
     price: 10000,
     avatarColor: "bg-teal-500",
     iin: "820315354921",
-    bio: "Специализируется на лечении сложных нарушений ритма сердца, гипертонии и ишемической болезни. Прошел стажировку в Германии."
+    bio: "Специализируется на лечении сложных нарушений ритма сердца, гипертонии и ишемической болезни. Прошел стажировку в Германии.",
+    photo: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=300&q=80",
+    qualifications: "Доктор медицинских наук (Д.М.Н.), Высшая категория МЗ РК, Член Европейского общества кардиологов (ESC)",
+    academicBackground: "Профессор кафедры внутренних болезней, Казахский Национальный Медицинский Университет им. С.Д. Асфендиярова",
+    reviewsList: [
+      { name: "Михаил Филиппов", text: "Доктор очень профессионален в своей работе и отзывчив. Проконсультировал, и моя проблема была решена.", rating: 5 },
+      { name: "Аружан С.", text: "Очень вежливый доктор, выслушал все жалобы, назначил только нужные анализы без лишней траты денег.", rating: 5 }
+    ]
   },
   {
     id: "doc-2",
@@ -125,7 +139,14 @@ export const BEST_DOCTORS = [
     price: 8500,
     avatarColor: "bg-pink-500",
     iin: "900512450392",
-    bio: "Ведущий эксперт по лечению обструктивных бронхитов и аллергических патологий у детей раннего возраста. Любимый доктор сотен малышей."
+    bio: "Ведущий эксперт по лечению обструктивных бронхитов и аллергических патологий у детей раннего возраста. Любимый доктор сотен малышей.",
+    photo: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=300&q=80",
+    qualifications: "Кандидат медицинских наук (К.М.Н.), Врач-педиатр высшей категории",
+    academicBackground: "Доцент кафедры детских болезней, Научный центр педиатрии и детской хирургии РК",
+    reviewsList: [
+      { name: "Елена К.", text: "Мадина Смагулова — лучший педиатр! Всегда на связи, находит подход к ребенку с первых секунд. Очень рекомендую.", rating: 5 },
+      { name: "Кайрат Мусин", text: "Отличный детский врач, быстро вылечили бронхит без лишних антибиотиков.", rating: 4 }
+    ]
   },
   {
     id: "doc-3",
@@ -138,7 +159,91 @@ export const BEST_DOCTORS = [
     price: 12000,
     avatarColor: "bg-blue-500",
     iin: "850904351122",
-    bio: "Эксперт в области нейрорадиологии и ранней диагностики опухолей головного мозга с применением современных ИИ-моделей MedTariff."
+    bio: "Эксперт в области нейрорадиологии и ранней диагностики опухолей головного мозга с применением современных ИИ-моделей MedTariff.",
+    photo: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=300&q=80",
+    qualifications: "MD, Врач лучевой диагностики высшей категории, Член Европейского общества радиологов (ESR)",
+    academicBackground: "Бывший заведующий отделением МРТ Национального научного кардиохирургического центра",
+    reviewsList: [
+      { name: "Дамир Ахметов", text: "Делал МРТ головного мозга. Доктор Нурланов лично пояснил результаты снимков и дал ценные рекомендации. Настоящий профи.", rating: 5 },
+      { name: "Алия Ш.", text: "Быстро, качественно, очень детальная расшифровка снимка, которая помогла невропатологу поставить верный диагноз.", rating: 5 }
+    ]
+  },
+  {
+    id: "doc-4",
+    name: "Д-р Масуд Хан",
+    specialty: "Психотерапевт, Специалист по ментальному здоровью",
+    rating: 5.0,
+    reviews: 142,
+    experience: "10 лет",
+    clinic: "Керуен Медикус (Keruen)",
+    price: 15000,
+    avatarColor: "bg-indigo-500",
+    iin: "881023340512",
+    bio: "Специализируется на лечении депрессивных состояний, панических атак, семейной терапии и выгорания. Бережный подход к каждому клиенту.",
+    photo: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=300&q=80",
+    qualifications: "MBBS, BCS (Health), FCPS (Psychiatry), MD (Psychotherapy), CCD (KazMed)",
+    academicBackground: "Профессор и декан факультета ментального здоровья, Медицинский Университет Астана",
+    reviewsList: [
+      { name: "Michael Filip", text: "Д-р Масуд очень профессионален в своей работе и отзывчив. Проконсультировал, и моя проблема была решена.", rating: 5 },
+      { name: "Зарина Б.", text: "Замечательный терапевт, сессии проходят очень комфортно и продуктивно. Помог справиться с тревожностью.", rating: 5 }
+    ]
+  },
+  {
+    id: "doc-5",
+    name: "Д-р Алина Смирнова",
+    specialty: "Педиатр / Терапевт общей практики",
+    rating: 4.9,
+    reviews: 120,
+    experience: "8 лет",
+    clinic: "HAK Medical",
+    price: 7500,
+    avatarColor: "bg-purple-500",
+    iin: "921105450192",
+    bio: "Консультирует взрослых и детей по широкому спектру терапевтических вопросов. Специализируется на ОРВИ, сезонных аллергиях и вакцинации.",
+    photo: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=300&q=80",
+    qualifications: "Врач общей практики (ВОП) первой категории, Член ассоциации семейных врачей РК",
+    academicBackground: "Ассистент кафедры семейной медицины, Алматинский государственный институт усовершенствования врачей",
+    reviewsList: [
+      { name: "Ольга В.", text: "Замечательный врач, очень спокойная и доброжелательная. Назначила правильное лечение ребенку без лишней паники.", rating: 5 }
+    ]
+  },
+  {
+    id: "doc-6",
+    name: "Д-р Серик Байманов",
+    specialty: "Кардиолог / Терапевт",
+    rating: 4.8,
+    reviews: 95,
+    experience: "14 лет",
+    clinic: "Сункар (Sunkar)",
+    price: 8000,
+    avatarColor: "bg-red-500",
+    iin: "840411350811",
+    bio: "Диагностика и лечение заболеваний сердечно-сосудистой системы. Специалист по холтеровскому мониторированию и стресс-эхокардиографии.",
+    photo: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=300&q=80",
+    qualifications: "Кардиолог высшей категории, врач функциональной диагностики",
+    academicBackground: "Старший ординатор отделения неотложной кардиологии, Городской кардиологический центр",
+    reviewsList: [
+      { name: "Бахытжан Т.", text: "Врач своего дела. Провел обследование, выровнял давление, подобрал лекарства, которые реально работают.", rating: 5 }
+    ]
+  },
+  {
+    id: "doc-7",
+    name: "Д-р Мадина Оспанова",
+    specialty: "Невропатолог высшей категории",
+    rating: 4.9,
+    reviews: 150,
+    experience: "16 лет",
+    clinic: "Orhun Medical",
+    price: 9500,
+    avatarColor: "bg-indigo-500",
+    iin: "860812450399",
+    bio: "Специалист по лечению головных болей, остеохондроза, невралгий и последствий сосудистых нарушений. Применяет современные методики реабилитации.",
+    photo: "https://images.unsplash.com/photo-1594824813573-246434de83fb?auto=format&fit=crop&w=300&q=80",
+    qualifications: "К.М.Н., Невропатолог высшей квалификационной категории",
+    academicBackground: "Доцент кафедры неврологии, Институт неврологии и нейрохирургии Республики Казахстан",
+    reviewsList: [
+      { name: "Светлана Л.", text: "После назначенного Мадиной Оспановной курса массажа и физиопроцедур боли в спине прошли полностью. Огромная благодарность!", rating: 5 }
+    ]
   }
 ];
 
@@ -154,8 +259,8 @@ export default function App() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
 
-  // Bottom Navigation tabs: search, blog, compare, profile
-  const [activeTab, setActiveTab] = useState<"search" | "blog" | "compare" | "profile">("search");
+  // Bottom Navigation tabs: search, blog, compare, profile, admin
+  const [activeTab, setActiveTab] = useState<"search" | "blog" | "compare" | "profile" | "admin">("search");
   
   // Search query states
   const [searchQuery, setSearchQuery] = useState("ПЦР");
@@ -164,6 +269,11 @@ export default function App() {
   const [marketInsights, setMarketInsights] = useState("");
   const [isSimulatedMode, setIsSimulatedMode] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [selectedDoctor, setSelectedDoctor] = useState<any | null>(null);
+  const [selectedDayIndex, setSelectedDayIndex] = useState(1);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState("10:30");
+  const [timePeriod, setTimePeriod] = useState<"morning" | "afternoon">("morning");
+  const [searchMode, setSearchMode] = useState<"live" | "db">("live");
   
   // Lists & markers
   const [clinics, setClinics] = useState<Clinic[]>([]);
@@ -490,41 +600,249 @@ export default function App() {
     }
   }, [autocompleteQuery]);
 
-  // Execute Search proxying server endpoints
-  const executeSearch = async (queryText: string, searchCity: string) => {
+  // Lazy Write-Back: Saves parsed results to clinics & services collections in the background
+  const saveSearchDataToFirestore = async (queryText: string, searchCity: string, clinicsList: Clinic[]) => {
+    if (!clinicsList || clinicsList.length === 0) return;
+    try {
+      console.log("Lazy Write-Back: Starting background verification and synchronization with Firestore for:", queryText);
+      const prices = clinicsList.map(c => c.price);
+      const minPrice = Math.min(...prices);
+      const averagePrice = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+      
+      for (const clinic of clinicsList) {
+        const clinicRef = doc(db, "clinics", clinic.id);
+        let logoUrl = "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80";
+        const cName = clinic?.name?.toLowerCase() || "";
+        if (cName.includes("олимп")) {
+          logoUrl = "https://images.unsplash.com/photo-1579684389782-64d84b5e901a?auto=format&fit=crop&w=150&q=80";
+        } else if (cName.includes("инвиво") || cName.includes("invivo")) {
+          logoUrl = "https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&w=150&q=80";
+        } else if (cName.includes("сункар") || cName.includes("sunkar")) {
+          logoUrl = "https://images.unsplash.com/photo-1583324113626-70df0f4deaab?auto=format&fit=crop&w=150&q=80";
+        } else if (cName.includes("orhun") || cName.includes("орхун")) {
+          logoUrl = "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=150&q=80";
+        } else if (cName.includes("keruen") || cName.includes("керуен")) {
+          logoUrl = "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=150&q=80";
+        }
+        
+        const clinicDocData = {
+          id: clinic.id,
+          name: clinic.name,
+          logoUrl,
+          rating: clinic.rating || 4.5,
+          address: clinic.address,
+          district: clinic.district || "Центральный р-н",
+          city: searchCity,
+          phone: clinic.phone || "+7 (707) 123-45-00",
+          osms: clinic.osms || false,
+          updatedAt: new Date().toISOString()
+        };
+        await setDoc(clinicRef, clinicDocData, { merge: true });
+      }
+
+      const serviceId = `service-${queryText.toLowerCase().replace(/[^a-zа-я0-9]+/g, "-")}-${searchCity.toLowerCase().replace(/[^a-zа-я0-9]+/g, "-")}`;
+      const serviceRef = doc(db, "services", serviceId);
+      
+      let officialCode = "А09.05.003";
+      const qTextLower = queryText?.toLowerCase() || "";
+      if (qTextLower.includes("пцр")) {
+        officialCode = "А09.05.045";
+      } else if (qTextLower.includes("мрт")) {
+        officialCode = "А11.08.001";
+      } else if (qTextLower.includes("кт") || qTextLower.includes("томограф")) {
+        officialCode = "А06.09.005";
+      } else if (qTextLower.includes("узи")) {
+        officialCode = "А04.16.001";
+      } else if (qTextLower.includes("моч")) {
+        officialCode = "А09.05.004";
+      } else if (qTextLower.includes("сахар") || qTextLower.includes("глюкоз")) {
+        officialCode = "А09.05.023";
+      } else if (qTextLower.includes("терапевт")) {
+        officialCode = "В01.047.001";
+      } else if (qTextLower.includes("кардиолог")) {
+        officialCode = "В01.015.001";
+      } else if (qTextLower.includes("невро")) {
+        officialCode = "В01.024.001";
+      }
+
+      const serviceDocData = {
+        id: serviceId,
+        name: queryText,
+        code: officialCode,
+        city: searchCity,
+        minPrice,
+        averagePrice,
+        clinicPrices: clinicsList.map(c => ({
+          clinicId: c.id,
+          clinicName: c.name,
+          price: c.price,
+          updated: c.updated || "сегодня"
+        })),
+        updatedAt: new Date().toISOString()
+      };
+      await setDoc(serviceRef, serviceDocData, { merge: true });
+      console.log("Lazy Write-Back: Successfully aggregated, validated and synchronized data to Firestore for:", queryText);
+    } catch (err) {
+      console.warn("Lazy Write-Back background synchronization warning (graceful):", err);
+    }
+  };
+
+  // Compute market median and identify anomalous pricing inflation (>50% above median) + parsedAt stamp
+  const enrichWithInflationAndTimestamp = (list: Clinic[]) => {
+    if (list.length === 0) return [];
+    const prices = list.map(c => c.price).sort((a, b) => a - b);
+    const mid = Math.floor(prices.length / 2);
+    const median = prices.length % 2 !== 0 ? prices[mid] : (prices[mid - 1] + prices[mid]) / 2;
+    const nowStr = new Date().toISOString();
+    return list.map(c => ({
+      ...c,
+      anomalous_inflation: c.price > median * 1.5,
+      parsedAt: c.parsedAt || nowStr
+    }));
+  };
+
+  // Mode 2: Static Database Search (DB-Mode)
+  const executeStaticDBSearch = async (queryText: string, searchCity: string) => {
+    try {
+      console.log(`DB-Mode: Querying local Firestore database for: "${queryText}" in ${searchCity}`);
+      const q = query(
+        collection(db, "services"),
+        where("city", "==", searchCity)
+      );
+      const querySnapshot = await getDocs(q);
+      let matchedService: any = null;
+      
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const docNameLower = data?.name?.toLowerCase() || "";
+        const queryTextLower = queryText?.toLowerCase() || "";
+        if (docNameLower && queryTextLower && (docNameLower.includes(queryTextLower) || queryTextLower.includes(docNameLower))) {
+          matchedService = data;
+        }
+      });
+
+      if (matchedService) {
+        console.log("DB-Mode: Match found in Firestore:", matchedService.name);
+        const clinicsSnapshot = await getDocs(query(collection(db, "clinics"), where("city", "==", searchCity)));
+        const dbClinicsMap: Record<string, any> = {};
+        clinicsSnapshot.forEach(docSnap => {
+          dbClinicsMap[docSnap.id] = docSnap.data();
+        });
+
+        const clinicsList: Clinic[] = matchedService.clinicPrices.map((cp: any) => {
+          const fullClinic = dbClinicsMap[cp.clinicId];
+          return {
+            id: cp.clinicId,
+            name: cp.clinicName,
+            price: cp.price,
+            address: fullClinic?.address || "ул. Кабанбай батыра, 21",
+            district: fullClinic?.district || "Центральный р-н",
+            distance: fullClinic?.distance || "2.1 км",
+            osms: fullClinic?.osms || false,
+            updated: cp.updated || "из базы данных",
+            phone: fullClinic?.phone || "+7 (707) 123-45-00",
+            rating: fullClinic?.rating || 4.5
+          };
+        });
+
+        const enrichedClinics = enrichWithInflationAndTimestamp(clinicsList);
+        setClinics(enrichedClinics);
+        setMarketInsights(`ИИ-Аналитика (БД-Режим): На основе исторических данных в Firestore, минимальная цена на "${matchedService.name}" в г. ${searchCity} составляет ${matchedService.minPrice.toLocaleString()} ₸, средняя — ${matchedService.averagePrice.toLocaleString()} ₸. Услуга привязана к государственному коду МЗ РК ${matchedService.code}.`);
+        setIsSimulatedMode(false);
+
+        const getCityFallbackCoords = (city: string) => {
+          const lower = city.toLowerCase();
+          if (lower.includes("астана")) return { lat: 51.169392, lng: 71.449074 };
+          if (lower.includes("шымкент")) return { lat: 42.3417, lng: 69.5901 };
+          if (lower.includes("караганда")) return { lat: 49.8022, lng: 73.0881 };
+          return { lat: 43.238940, lng: 76.889709 }; // Almaty default
+        };
+        const cityCenter = getCityFallbackCoords(searchCity);
+
+        const resolvedMarkers: MapMarker[] = clinicsList.map((c, i) => {
+          const fullClinic = dbClinicsMap[c.id];
+          const latFallback = cityCenter.lat + (i - 2) * 0.007;
+          const lngFallback = cityCenter.lng + (i - 2) * 0.009 * (Math.sin(i) || 1);
+          return {
+            id: c.id,
+            name: c.name,
+            price: c.price,
+            lat: fullClinic?.lat || latFallback,
+            lng: fullClinic?.lng || lngFallback,
+            address: c.address,
+            osms: c.osms,
+            rating: c.rating || fullClinic?.rating || 4.5
+          };
+        });
+        setMarkers(resolvedMarkers);
+        if (clinicsList.length > 0) {
+          setActiveMarkerId(clinicsList[0].id);
+        }
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn("DB-Mode: Error querying Firestore:", err);
+      return false;
+    }
+  };
+
+  // Mode 1: Self-Live Search (High Priority)
+  const executeLiveSearch = async (queryText: string, searchCity: string) => {
+    // 1. Fetch filtered clinics
+    const resServices = await fetch("/api/search-services", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: queryText, city: searchCity }),
+    });
+    const servicesData = await resServices.json();
+
+    setMarketInsights(servicesData.insights || "Анализ цен по вашему городу готов.");
+    const fetchedClinics = servicesData.clinics || [];
+    const enrichedClinics = enrichWithInflationAndTimestamp(fetchedClinics);
+    setClinics(enrichedClinics);
+    setIsSimulatedMode(servicesData.isSimulated || false);
+
+    // 2. Fetch maps coordinates
+    const resMap = await fetch("/api/map-grounding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: queryText, city: searchCity }),
+    });
+    const mapData = await resMap.json();
+    setMarkers(mapData.markers || []);
+
+    if (fetchedClinics.length > 0) {
+      setActiveMarkerId(fetchedClinics[0].id);
+    }
+
+    // Lazy write-back triggered in background
+    saveSearchDataToFirestore(queryText, searchCity, fetchedClinics);
+  };
+
+  // Execute Search proxying server endpoints with Mode Selector
+  const executeSearch = async (queryText: string, searchCity: string, overrideMode?: "live" | "db") => {
     if (!queryText.trim()) return;
     setIsSearching(true);
     setSearchQuery(queryText);
     setAutocompleteQuery("");
     
+    const activeSearchMode = overrideMode || searchMode;
+    console.log(`Executing search proxy with mode: ${activeSearchMode}`);
+
     try {
-      // 1. Fetch filtered clinics
-      const resServices = await fetch("/api/search-services", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: queryText, city: searchCity }),
-      });
-      const servicesData = await resServices.json();
-
-      setMarketInsights(servicesData.insights || "Анализ цен по вашему городу готов.");
-      setClinics(servicesData.clinics || []);
-      setIsSimulatedMode(servicesData.isSimulated || false);
-
-      // 2. Fetch maps coordinates
-      const resMap = await fetch("/api/map-grounding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: queryText, city: searchCity }),
-      });
-      const mapData = await resMap.json();
-      setMarkers(mapData.markers || []);
-
-      // Reset active selections
-      if (servicesData.clinics && servicesData.clinics.length > 0) {
-        setActiveMarkerId(servicesData.clinics[0].id);
+      if (activeSearchMode === "db") {
+        const dbResult = await executeStaticDBSearch(queryText, searchCity);
+        if (!dbResult) {
+          console.log("DB search found nothing or failed. Falling back to Live search...");
+          setSearchMode("live");
+          await executeLiveSearch(queryText, searchCity);
+        }
+      } else {
+        await executeLiveSearch(queryText, searchCity);
       }
 
-      // 3. Add search item to "Недавнее" list if not already there
+      // Add search item to "Недавнее" list if not already there
       setRecentSearches(prev => {
         const exists = prev.some(item => item.query.toLowerCase() === queryText.toLowerCase());
         if (exists) return prev;
@@ -537,7 +855,7 @@ export default function App() {
         return [newItem, ...prev.slice(0, 5)];
       });
 
-      // 4. Persist search request to Firestore under searches/searchHistory
+      // Persist search request to Firestore under searches/searchHistory
       const uid = currentUserUid || "anonymous";
       const newHistoryItem = {
         id: "hist-" + Date.now(),
@@ -545,10 +863,9 @@ export default function App() {
         query: queryText,
         city: searchCity,
         timestamp: new Date().toISOString(),
-        clinicsCount: servicesData.clinics ? servicesData.clinics.length : 0,
+        clinicsCount: clinics.length,
       };
 
-      // Instantly sync to local storage cache so it's responsive and always accessible offline
       try {
         const localHistKey = `medtariff_history_${uid}`;
         const existingLocal = localStorage.getItem(localHistKey);
@@ -574,7 +891,6 @@ export default function App() {
         }
       } catch (err) {
         console.warn("Failed to write search history to Firestore, fallback is active:", err);
-        // We do not call handleFirestoreError here so that it fails silently/gracefully for the user without flashing toast alerts
       }
 
     } catch (e) {
@@ -736,7 +1052,7 @@ export default function App() {
             <div className="flex-1 flex flex-col overflow-hidden font-sans">
               
               {/* Vibrant medical blue background block with the user profile context */}
-              <div className={`bg-[#007EFA] text-white px-5 shadow-lg shrink-0 transition-all duration-300 relative ${
+              <div className={`bg-[#1B449C] text-white px-5 shadow-lg shrink-0 transition-all duration-300 relative ${
                 isHeaderCollapsed 
                   ? "pt-4 pb-3 rounded-b-[1.8rem] space-y-2.5" 
                   : "pt-6 pb-5 rounded-b-[2.5rem] space-y-4"
@@ -762,9 +1078,11 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => setShowCityModal(true)}
-                          className="flex items-center gap-1 text-[10px] text-white/80 font-bold hover:text-white transition mt-1 cursor-pointer"
+                          className="flex items-center gap-1.5 text-[10px] bg-white/12 border border-white/20 hover:bg-white/20 text-white font-extrabold py-0.5 px-2 rounded-lg transition mt-1.5 cursor-pointer shadow-3xs"
                         >
-                          <span>г. {onboarding.city} ∨</span>
+                          <MapPin className="w-3 h-3 text-sky-200 shrink-0" />
+                          <span>{onboarding.city}</span>
+                          <ChevronDown className="w-3 h-3 text-white/70 shrink-0" />
                         </button>
                       </div>
                     </div>
@@ -838,21 +1156,22 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Bottom details of header: compact List/Map switcher pills */}
-                  <div className="flex items-center justify-center px-1.5 pt-0.5">
+                  {/* Bottom details of header: compact List/Map switcher */}
+                  <div className="flex items-center justify-center px-1.5 pt-0.5 gap-2 w-full">
+                    {/* List/Map Switcher */}
                     <div className="bg-white/15 p-0.5 rounded-full flex items-center border border-white/10 shrink-0">
                       <button
                         onClick={() => setViewMode("list")}
-                        className={`px-3.5 py-1 rounded-full text-[8.5px] font-black uppercase flex items-center gap-1 transition-all duration-200 ${
-                          viewMode === "list" ? "bg-white text-[#007EFA] shadow-sm" : "text-white/90 hover:text-white"
+                        className={`px-3 py-1 rounded-full text-[8.5px] font-black uppercase flex items-center gap-1 transition-all duration-200 ${
+                          viewMode === "list" ? "bg-white text-[#1B449C] shadow-xs" : "text-white/90 hover:text-white"
                         }`}
                       >
                         Список
                       </button>
                       <button
                         onClick={() => setViewMode("map")}
-                        className={`px-3.5 py-1 rounded-full text-[8.5px] font-black uppercase flex items-center gap-1 transition-all duration-200 ${
-                          viewMode === "map" ? "bg-white text-[#007EFA] shadow-sm" : "text-white/90 hover:text-white"
+                        className={`px-3 py-1 rounded-full text-[8.5px] font-black uppercase flex items-center gap-1 transition-all duration-200 ${
+                          viewMode === "map" ? "bg-white text-[#1B449C] shadow-xs" : "text-white/90 hover:text-white"
                         }`}
                       >
                         Карта
@@ -932,8 +1251,7 @@ export default function App() {
                 {viewMode === "list" && (
                   <div className="flex-1 overflow-y-auto p-4 pb-28 space-y-4">
 
-                     {/* Gorgeous Reference-styled Home Dashboard when there's no active query */}
-                    {clinics.length === 0 && searchQuery === "" && (
+                     {/* Gorgeous Reference-styled Home Dashboard (Always visible) */}
                       <div className="space-y-5 animate-fade-in select-none">
                         
                         {/* 1. Find Your Specialist (Основные категории) */}
@@ -945,7 +1263,7 @@ export default function App() {
                                 setAutocompleteQuery("Терапевт");
                                 executeSearch("Терапевт", onboarding.city);
                               }}
-                              className="text-[10px] font-bold text-[#007EFA] hover:underline"
+                              className="text-[10px] font-bold text-[#1B449C] hover:underline"
                             >
                               Показать все
                             </button>
@@ -954,7 +1272,7 @@ export default function App() {
                           {/* Horizontal scroll of beautiful pastel buttons */}
                           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
                             {[
-                              { title: "Терапевт", query: "Терапевт", icon: UserIcon, bg: "bg-[#E8F3FF] text-[#007EFA]" },
+                              { title: "Терапевт", query: "Терапевт", icon: UserIcon, bg: "bg-[#F0F5FF] text-[#1B449C]" },
                               { title: "Кардиолог", query: "Прием кардиолога", icon: Heart, bg: "bg-[#FFF0F0] text-rose-500" },
                               { title: "Невропатолог", query: "Прием невропатолога", icon: Brain, bg: "bg-[#F3E8FF] text-indigo-500" },
                               { title: "Стоматолог", query: "Лечение кариеса", icon: Smile, bg: "bg-[#EAFBF3] text-emerald-500" },
@@ -984,7 +1302,13 @@ export default function App() {
                         </div>
 
                         {/* 2. Carousel Active Doctor Banner (Dr. Masud Khan Card) */}
-                        <div className="bg-gradient-to-br from-[#007EFA] via-[#0060E0] to-[#004BB0] text-white rounded-[2rem] p-5 shadow-md relative overflow-hidden text-left">
+                        <div 
+                          onClick={() => {
+                            const found = BEST_DOCTORS.find(d => d.id === "doc-4");
+                            if (found) setSelectedDoctor(found);
+                          }}
+                          className="bg-gradient-to-br from-[#1B449C] via-[#143B8A] to-[#0F2E6F] text-white rounded-[2rem] p-5 shadow-md relative overflow-hidden text-left cursor-pointer active:scale-98 transition-all"
+                        >
                           {/* Pattern overlays */}
                           <div className="absolute top-0 right-0 w-36 h-36 bg-white/5 rounded-full blur-2xl pointer-events-none" />
                           <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-sky-400/20 rounded-full blur-xl pointer-events-none" />
@@ -1011,13 +1335,14 @@ export default function App() {
                               </div>
 
                               <button 
-                                onClick={() => {
-                                  setAutocompleteQuery("Д-р Масуд Хан");
-                                  executeSearch("Терапевт", onboarding.city);
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const found = BEST_DOCTORS.find(d => d.id === "doc-4");
+                                  if (found) setSelectedDoctor(found);
                                 }}
-                                className="mt-2 px-4 py-1.5 bg-white text-[#007EFA] font-extrabold text-[10px] rounded-full hover:bg-sky-50 transition active:scale-95 cursor-pointer shadow-sm block"
+                                className="mt-2 px-4 py-1.5 bg-white text-[#1B449C] font-extrabold text-[10px] rounded-full hover:bg-sky-50 transition active:scale-95 cursor-pointer shadow-sm block"
                               >
-                                Записаться
+                                Подробнее
                               </button>
                             </div>
 
@@ -1050,7 +1375,7 @@ export default function App() {
                                 setAutocompleteQuery("Врач");
                                 executeSearch("Терапевт", onboarding.city);
                               }}
-                              className="text-[10px] font-bold text-[#007EFA] hover:underline"
+                              className="text-[10px] font-bold text-[#1B449C] hover:underline"
                             >
                               Все врачи
                             </button>
@@ -1060,6 +1385,7 @@ export default function App() {
                           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
                             {[
                               {
+                                id: "doc-5",
                                 name: "Д-р Алина Смирнова",
                                 specialty: "Педиатр / Терапевт",
                                 rate: "4.9",
@@ -1067,6 +1393,7 @@ export default function App() {
                                 img: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=150&q=80",
                               },
                               {
+                                id: "doc-6",
                                 name: "Д-р Серик Байманов",
                                 specialty: "Кардиолог / Терапевт",
                                 rate: "4.8",
@@ -1074,6 +1401,7 @@ export default function App() {
                                 img: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80",
                               },
                               {
+                                id: "doc-7",
                                 name: "Д-р Мадина Оспанова",
                                 specialty: "Невропатолог",
                                 rate: "4.95",
@@ -1084,8 +1412,8 @@ export default function App() {
                               <div 
                                 key={idx}
                                 onClick={() => {
-                                  setAutocompleteQuery(docItem.name);
-                                  executeSearch("Терапевт", onboarding.city);
+                                  const found = BEST_DOCTORS.find(d => d.id === docItem.id);
+                                  if (found) setSelectedDoctor(found);
                                 }}
                                 className="bg-white border border-slate-150 rounded-2xl p-3 w-[150px] shrink-0 cursor-pointer active:scale-98 transition shadow-3xs text-left"
                               >
@@ -1132,7 +1460,6 @@ export default function App() {
                         </div>
 
                       </div>
-                    )}
 
                     {/* Recent list "Недавнее" - Screen 2 / 5 reference layout */}
                     {clinics.length === 0 && (
@@ -1186,27 +1513,46 @@ export default function App() {
                     )}
 
                     {/* Clinics search results list */}
-                    {isSearching ? (
-                      <div className="py-16 flex flex-col items-center justify-center text-slate-400">
-                        <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
-                        <span className="text-xs font-semibold">Анализ цен по вашему городу...</span>
-                      </div>
-                    ) : clinics.length === 0 ? (
-                      <div className="py-12 text-center text-slate-400">
-                        <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                        <p className="text-xs font-bold text-slate-700">Ничего не найдено</p>
-                        <p className="text-[10px] mt-0.5">Введите новый запрос или сбросьте фильтр ОСМС.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3.5">
-                        {sortedClinics.map((clinic) => (
-                          <div 
-                            key={clinic.id} 
+                    <div className="space-y-3 pt-2 text-left border-t border-slate-100">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-xs font-black text-slate-800 uppercase tracking-tight">
+                          {searchQuery ? `Результаты поиска: ${searchQuery}` : `Клиники и предложения в ${onboarding.city}`}
+                        </span>
+                        {searchQuery && (
+                          <button
                             onClick={() => {
-                              setSelectedClinic(clinic);
-                              setSelectedTariff("standard");
+                              setSearchQuery("");
+                              setAutocompleteQuery("");
+                              setClinics([]);
                             }}
+                            className="text-[10px] font-bold text-[#1B449C] hover:underline cursor-pointer"
                           >
+                            Сбросить поиск
+                          </button>
+                        )}
+                      </div>
+
+                      {isSearching ? (
+                        <div className="py-16 flex flex-col items-center justify-center text-slate-400">
+                          <div className="w-8 h-8 border-3 border-[#1B449C] border-t-transparent rounded-full animate-spin mb-3" />
+                          <span className="text-xs font-semibold">Анализ цен по вашему городу...</span>
+                        </div>
+                      ) : clinics.length === 0 ? (
+                        <div className="py-12 text-center text-slate-400">
+                          <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                          <p className="text-xs font-bold text-slate-700">Ничего не найдено</p>
+                          <p className="text-[10px] mt-0.5">Введите новый запрос или сбросьте фильтр ОСМС.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3.5">
+                          {sortedClinics.map((clinic) => (
+                            <div 
+                              key={clinic.id} 
+                              onClick={() => {
+                                setSelectedClinic(clinic);
+                                setSelectedTariff("standard");
+                              }}
+                            >
                             <ClinicCard
                               clinic={clinic}
                               isSelectedForComparison={selectedCompareIds.includes(clinic.id)}
@@ -1221,6 +1567,7 @@ export default function App() {
                         ))}
                       </div>
                     )}
+                    </div>
 
                   </div>
                 )}
@@ -1248,18 +1595,27 @@ export default function App() {
           {activeTab === "blog" && (
             <div className="flex-1 flex flex-col overflow-y-auto p-4 pb-28 space-y-5 bg-slate-50/50">
               {selectedBlogArticle ? (
-                /* Full article detail view */
-                <div className="bg-white rounded-[2.2rem] p-6 border border-slate-100 shadow-xs space-y-4 text-left">
+                /* Full article detail view with Cover Photo */
+                <div className="bg-white rounded-[2.2rem] p-6 border border-slate-100 shadow-xs space-y-4 text-left animate-fade-in">
                   <button
                     onClick={() => setSelectedBlogArticle(null)}
-                    className="flex items-center gap-1.5 text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800 transition cursor-pointer"
+                    className="flex items-center gap-1.5 text-[10px] font-black text-[#1B449C] uppercase tracking-widest hover:underline transition cursor-pointer"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" /> Назад в Блог
                   </button>
 
+                  {selectedBlogArticle.imageUrl && (
+                    <img
+                      src={selectedBlogArticle.imageUrl}
+                      alt={selectedBlogArticle.title}
+                      className="w-full h-48 object-cover rounded-2xl border border-slate-100 shadow-3xs"
+                      referrerPolicy="no-referrer"
+                    />
+                  )}
+
                   <div className="space-y-2 border-b border-slate-100 pb-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md font-black uppercase tracking-wider">
+                      <span className="text-[9px] bg-blue-50 text-[#1B449C] px-2.5 py-1 rounded-md font-black uppercase tracking-wider">
                         {selectedBlogArticle.category}
                       </span>
                       <span className="text-[9px] text-slate-400 font-bold flex items-center gap-1">
@@ -1281,59 +1637,22 @@ export default function App() {
                   </p>
                 </div>
               ) : (
-                /* Main blog index with category filter, award nominees & articles */
+                /* Main blog index with category filter & premium cover article lists */
                 <>
                   {/* Screen Title Header */}
                   <div className="flex items-center justify-between py-1 shrink-0 text-left">
                     <div>
-                      <h3 className="font-black text-slate-900 text-lg tracking-tight">Медицинский Блог</h3>
+                      <h3 className="font-black text-slate-900 text-lg tracking-tight">Полезная Лента</h3>
                       <span className="text-[9.5px] text-slate-400 font-mono block tracking-wider uppercase mt-0.5">
-                        Экспертные статьи ОСМС & Премия РК
+                        Лайфхаки ОСМС, анализы и советы экспертов
                       </span>
-                    </div>
-                    <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-full shrink-0">
-                      <Award className="w-3.5 h-3.5 text-amber-600" />
-                      <span className="text-[8.5px] font-black text-amber-800 uppercase tracking-widest">Премия 2026</span>
-                    </div>
-                  </div>
-
-                  {/* PREMIUM SECTION: NAZIONALNAYA PREMIYA "BEST DOCTOR 2026" - Luxury Deep Cosmic Purple styling */}
-                  <div
-                    onClick={() => setShowBestDoctorSheet(true)}
-                    className="bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 border border-purple-500/30 rounded-[2.2rem] p-5 shadow-md text-left relative overflow-hidden cursor-pointer hover:scale-[1.01] transition duration-200 shrink-0 select-none"
-                  >
-                    {/* Glowing abstract background circle */}
-                    <div className="absolute -top-12 -right-12 w-32 h-32 bg-indigo-600/20 rounded-full blur-2xl pointer-events-none" />
-                    
-                    <div className="relative z-10 space-y-3.5">
-                      <div>
-                        <span className="text-[8px] font-mono uppercase tracking-widest text-indigo-300 font-black block">Ежегодный рейтинг</span>
-                        <h4 className="text-sm font-black text-white uppercase tracking-tight mt-1 flex items-center gap-1.5">
-                          Номинанты «Лучший Доктор 2026»
-                          <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-                        </h4>
-                      </div>
-                      <p className="text-[10px] text-indigo-200/80 leading-relaxed font-medium">
-                        Народный рейтинг лучших специалистов. Нажмите, чтобы открыть список номинантов и записаться по системе ОСМС или со скидкой.
-                      </p>
-                      
-                      <div className="pt-0.5">
-                        <span className="inline-flex items-center gap-1 px-3.5 py-1.5 bg-[#B0FF00] hover:bg-[#a2eb00] text-slate-950 text-[9px] font-black uppercase tracking-wider rounded-xl transition shadow-sm">
-                          Смотреть номинантов
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </span>
-                      </div>
                     </div>
                   </div>
 
                   {/* USEFUL ARTICLES & GUIDE SECTION */}
-                  <div className="space-y-3 pt-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block text-left">
-                      Полезные статьи и лайфхаки
-                    </span>
-
+                  <div className="space-y-3.5 pt-1">
                     {/* Horizontal sliding pill matrix for categories */}
-                    <div className="space-y-3.5">
+                    <div className="space-y-4">
                       <div className="flex items-center gap-2 overflow-x-auto py-1 no-scrollbar select-none">
                         {(["Все", "Лайфхаки ОСМС", "Права пациентов", "Анализ цен"] as const).map((cat) => (
                           <button
@@ -1341,7 +1660,7 @@ export default function App() {
                             onClick={() => setSelectedCat(cat)}
                             className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer ${
                               selectedCat === cat
-                                ? "bg-[#007EFA] text-white border-[#007EFA] shadow-xs"
+                                ? "bg-[#1B449C] text-white border-[#1B449C] shadow-xs"
                                 : "bg-white text-slate-500 border border-slate-200 hover:text-slate-800"
                             }`}
                           >
@@ -1350,42 +1669,67 @@ export default function App() {
                         ))}
                       </div>
 
-                      <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-4">
                         {BLOG_ARTICLES.filter(
                           art => selectedCat === "Все" || art.category === selectedCat
                         ).map((article) => {
-                          // Custom style markers for different categories
-                          const sideColor = 
-                            article.category === "Лайфхаки ОСМС" ? "border-l-indigo-600" :
-                            article.category === "Права пациентов" ? "border-l-emerald-500" : "border-l-rose-500";
+                          const tagColor = 
+                            article.category === "Лайфхаки ОСМС" ? "bg-blue-50 text-[#1B449C] border-blue-100/45" :
+                            article.category === "Права пациентов" ? "bg-emerald-50 text-emerald-700 border-emerald-100/45" : 
+                            "bg-rose-50 text-rose-700 border-rose-100/45";
 
                           return (
                             <div
                               key={article.id}
                               onClick={() => setSelectedBlogArticle(article)}
-                              className={`bg-white border border-slate-200/80 border-l-4 ${sideColor} rounded-2xl p-4.5 shadow-2xs hover:border-indigo-300 transition-all cursor-pointer text-left space-y-2 group`}
+                              className="bg-white border border-slate-200/70 rounded-[2rem] overflow-hidden shadow-3xs hover:shadow-2xs hover:border-blue-300 transition-all cursor-pointer text-left flex flex-col group"
                             >
-                              <div className="flex items-center justify-between">
-                                <span className="text-[8.5px] font-extrabold text-indigo-700 uppercase tracking-wider bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-100/30">
-                                  {article.category}
-                                </span>
-                                <div className="flex items-center gap-1 text-[8.5px] text-slate-400 font-mono">
-                                  <Calendar className="w-3 h-3" />
-                                  <span>{article.date}</span>
+                              {/* Cover photo with parallax hover effect */}
+                              {article.imageUrl && (
+                                <div className="h-44 w-full overflow-hidden relative border-b border-slate-100 bg-slate-50">
+                                  <img
+                                    src={article.imageUrl}
+                                    alt={article.title}
+                                    className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                  <div className="absolute top-3 left-3">
+                                    <span className={`text-[8px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border shadow-3xs ${tagColor}`}>
+                                      {article.category}
+                                    </span>
+                                  </div>
                                 </div>
-                              </div>
-                              
-                              <h4 className="font-extrabold text-slate-800 text-xs leading-snug group-hover:text-indigo-900 transition-colors">
-                                {article.title}
-                              </h4>
-                              
-                              <p className="text-[10px] text-slate-400 leading-relaxed font-medium line-clamp-2">
-                                {article.excerpt}
-                              </p>
+                              )}
 
-                              <div className="pt-1 flex items-center justify-end text-[9px] font-black text-indigo-600 uppercase tracking-widest gap-0.5 group-hover:text-indigo-800">
-                                <span>Читать полностью</span>
-                                <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                              <div className="p-4.5 space-y-2 flex-1 flex flex-col justify-between">
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-2 text-[8px] text-slate-400 font-mono">
+                                    <div className="flex items-center gap-1">
+                                      <Calendar className="w-3 h-3" />
+                                      <span>{article.date}</span>
+                                    </div>
+                                    <span>•</span>
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      <span>{article.readTime} чтение</span>
+                                    </div>
+                                  </div>
+                                  
+                                  <h4 className="font-extrabold text-slate-800 text-xs leading-snug group-hover:text-[#1B449C] transition-colors line-clamp-2">
+                                    {article.title}
+                                  </h4>
+                                  
+                                  <p className="text-[10px] text-slate-400 leading-relaxed font-medium line-clamp-2">
+                                    {article.excerpt}
+                                  </p>
+                                </div>
+
+                                <div className="pt-3 border-t border-slate-50 flex items-center justify-between text-[9px]">
+                                  <span className="text-slate-350 font-medium">Казахстан, 2026</span>
+                                  <span className="font-black text-[#1B449C] uppercase tracking-widest flex items-center gap-0.5 group-hover:text-blue-850">
+                                    Читать полностью →
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           );
@@ -1766,6 +2110,15 @@ export default function App() {
                 </div>
               )}
 
+            </div>
+          )}
+
+          {/* ========================================== */}
+          {/* TAB 5: HACKATHON ADMIN HUB (Парсер и БД)    */}
+          {/* ========================================== */}
+          {activeTab === "admin" && (
+            <div className="flex-1 flex flex-col overflow-y-auto">
+              <AdminHub currentCity={onboarding.city} />
             </div>
           )}
 
@@ -2681,6 +3034,339 @@ export default function App() {
           )}
 
           {/* ========================================================== */}
+          {/* PREMIUM DOCTOR PROFILE COMPONENT LAYER */}
+          {/* ========================================================== */}
+          {selectedDoctor && (() => {
+            const docBrandColors = (clinicName: string) => {
+              const lower = clinicName.toLowerCase();
+              if (lower.includes("олимп") || lower.includes("olymp")) {
+                return {
+                  from: "from-emerald-500",
+                  to: "to-teal-600",
+                  bg: "bg-emerald-500",
+                  text: "text-emerald-600",
+                  light: "bg-emerald-50"
+                };
+              }
+              if (lower.includes("инвиво") || lower.includes("invivo")) {
+                return {
+                  from: "from-cyan-400",
+                  to: "to-indigo-500",
+                  bg: "bg-cyan-500",
+                  text: "text-indigo-600",
+                  light: "bg-cyan-50"
+                };
+              }
+              if (lower.includes("сункар") || lower.includes("sunkar")) {
+                return {
+                  from: "from-amber-400",
+                  to: "to-orange-500",
+                  bg: "bg-amber-500",
+                  text: "text-orange-600",
+                  light: "bg-amber-50"
+                };
+              }
+              if (lower.includes("orhun") || lower.includes("орхун")) {
+                return {
+                  from: "from-rose-500",
+                  to: "to-red-600",
+                  bg: "bg-rose-500",
+                  text: "text-rose-600",
+                  light: "bg-rose-50"
+                };
+              }
+              if (lower.includes("хак") || lower.includes("hak")) {
+                return {
+                  from: "from-blue-500",
+                  to: "to-indigo-600",
+                  bg: "bg-blue-600",
+                  text: "text-indigo-600",
+                  light: "bg-blue-50"
+                };
+              }
+              if (lower.includes("керуен") || lower.includes("keruen")) {
+                return {
+                  from: "from-purple-500",
+                  to: "to-fuchsia-600",
+                  bg: "bg-purple-500",
+                  text: "text-purple-600",
+                  light: "bg-purple-50"
+                };
+              }
+              return {
+                from: "from-[#1B449C]",
+                to: "to-indigo-700",
+                bg: "bg-[#1B449C]",
+                text: "text-[#1B449C]",
+                light: "bg-indigo-50"
+              };
+            };
+
+            const colors = docBrandColors(selectedDoctor.clinic);
+
+            const daysOfWeekList = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+            const next7DaysList = Array.from({ length: 7 }, (_, idx) => {
+              const d = new Date();
+              d.setDate(d.getDate() + idx);
+              return {
+                dayName: daysOfWeekList[d.getDay()],
+                dayNum: d.getDate(),
+                dateString: d.toISOString().split("T")[0]
+              };
+            });
+
+            const morningSlots = ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30"];
+            const afternoonSlots = ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30"];
+            const activeSlots = timePeriod === "morning" ? morningSlots : afternoonSlots;
+
+            return (
+              <div className="fixed inset-0 bg-[#F4F7FE] z-50 flex flex-col overflow-y-auto no-scrollbar animate-fade-in text-left">
+                {/* Header matching mock-up screen exactly */}
+                <div className="sticky top-0 bg-[#F4F7FE]/90 backdrop-blur-md px-5 py-4 flex items-center justify-between z-10">
+                  <button 
+                    onClick={() => setSelectedDoctor(null)}
+                    className="w-10 h-10 rounded-full border border-slate-200/80 bg-white flex items-center justify-center text-slate-700 hover:text-slate-900 shadow-3xs transition active:scale-95"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">Doctor Details</span>
+                  <div className="w-10" /> {/* Spacer */}
+                </div>
+
+                {/* Main scrollable body */}
+                <div className="flex-1 px-5 pb-28 space-y-6">
+                  
+                  {/* Photo Hero Banner Card with elegant cutout layout and transferred brand colors */}
+                  <div className="relative bg-white rounded-[32px] p-6 shadow-sm border border-slate-100/60 overflow-hidden min-h-[220px] flex flex-col justify-center">
+                    
+                    {/* Background Soft Radial Gradient Accent carrying the brand colors */}
+                    <div className={`absolute -right-10 -bottom-10 w-48 h-48 rounded-full filter blur-3xl opacity-20 bg-gradient-to-tr ${colors.from} ${colors.to}`} />
+                    
+                    <div className="relative z-10 max-w-[60%] space-y-3.5 pr-2">
+                      {/* Premium Specialty Badge */}
+                      <span className={`inline-block px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${colors.light} ${colors.text} border border-slate-100`}>
+                        {selectedDoctor.specialty.split(",")[0].split(" ")[0]}
+                      </span>
+
+                      {/* Display big typography name */}
+                      <h2 className="font-sans font-black text-slate-800 text-2xl tracking-tight leading-none">
+                        {selectedDoctor.name}
+                      </h2>
+
+                      {/* Professional Price layout */}
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl font-black text-slate-800 font-mono">
+                          {selectedDoctor.price.toLocaleString()} ₸
+                        </span>
+                        <span className="text-slate-400 text-[10px] font-bold">/Прием</span>
+                      </div>
+                    </div>
+
+                    {/* Dr cutout absolute positioning to the right */}
+                    <div className="absolute bottom-0 right-0 w-[42%] h-full flex items-end justify-center pointer-events-none z-0">
+                      <img 
+                        src={selectedDoctor.photo || "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=300&q=80"} 
+                        alt={selectedDoctor.name} 
+                        className="h-[95%] w-auto object-contain object-bottom transition-all duration-300 scale-105"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Rating & Stats Cards Grid (4 boxes like in the mockups) */}
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="bg-white p-3 rounded-2xl border border-slate-100/80 shadow-3xs text-center space-y-1">
+                      <span className="text-[14px] font-black text-slate-800 block leading-none">
+                        {selectedDoctor.experience.replace(/[^0-9]/g, "")}+
+                      </span>
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight block">Стаж</span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-2xl border border-slate-100/80 shadow-3xs text-center space-y-1">
+                      <span className="text-[14px] font-black text-slate-800 block leading-none">
+                        {Math.floor(selectedDoctor.reviews * 4.5)}+
+                      </span>
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight block">Пациенты</span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-2xl border border-slate-100/80 shadow-3xs text-center space-y-1">
+                      <span className="text-[14px] font-black text-slate-800 block leading-none">
+                        {selectedDoctor.reviews}
+                      </span>
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight block">Отзывы</span>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-2xl border border-slate-100/80 shadow-3xs text-center space-y-1">
+                      <span className="text-[14px] font-black text-amber-500 flex items-center justify-center gap-0.5 leading-none">
+                        ★ {selectedDoctor.rating.toFixed(1)}
+                      </span>
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight block">Рейтинг</span>
+                    </div>
+                  </div>
+
+                  {/* Choose a Date (Interactive Horizontal Calendar Slider) */}
+                  <div className="space-y-3">
+                    <h3 className="font-sans font-black text-slate-800 text-sm tracking-tight">Choose a date</h3>
+                    <div className="flex gap-2.5 overflow-x-auto pb-1.5 no-scrollbar">
+                      {next7DaysList.map((day, dIdx) => {
+                        const isDaySelected = selectedDayIndex === dIdx;
+                        return (
+                          <button
+                            key={dIdx}
+                            onClick={() => setSelectedDayIndex(dIdx)}
+                            className={`flex flex-col items-center justify-center w-14 h-20 rounded-2xl shrink-0 transition-all duration-300 border ${
+                              isDaySelected
+                                ? `bg-gradient-to-b ${colors.from} ${colors.to} text-white shadow-md border-transparent scale-105`
+                                : "bg-white text-slate-700 border-slate-100 hover:bg-slate-50/50"
+                            }`}
+                          >
+                            <span className={`text-[9.5px] uppercase font-black tracking-wider ${isDaySelected ? "text-white/80" : "text-slate-400"}`}>
+                              {day.dayName}
+                            </span>
+                            <span className="text-base font-black font-mono leading-none mt-1.5">
+                              {day.dayNum}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Choose a Suitable Time with morning/afternoon period selectors & hour buttons */}
+                  <div className="space-y-3.5 bg-slate-100/60 p-4.5 rounded-[28px] border border-slate-200/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Sun className="w-4 h-4 text-amber-500" />
+                        <span className="text-xs font-black text-slate-800">
+                          {timePeriod === "morning" ? "Утро / День" : "После обеда"}
+                        </span>
+                        <span className="bg-emerald-100 text-emerald-800 text-[8.5px] font-black font-mono tracking-wider px-2 py-0.5 rounded-full uppercase ml-1">
+                          • {activeSlots.length} слотов
+                        </span>
+                      </div>
+
+                      {/* Period Switcher */}
+                      <div className="bg-white p-0.5 rounded-xl flex items-center border border-slate-200 shrink-0">
+                        <button
+                          onClick={() => {
+                            setTimePeriod("morning");
+                            setSelectedTimeSlot("10:30");
+                          }}
+                          className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase transition ${
+                            timePeriod === "morning" ? "bg-slate-900 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          Утро
+                        </button>
+                        <button
+                          onClick={() => {
+                            setTimePeriod("afternoon");
+                            setSelectedTimeSlot("15:30");
+                          }}
+                          className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase transition ${
+                            timePeriod === "afternoon" ? "bg-slate-900 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          Обед
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Hour buttons grid */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {activeSlots.map((slot) => {
+                        const isSlotSelected = selectedTimeSlot === slot;
+                        return (
+                          <button
+                            key={slot}
+                            onClick={() => setSelectedTimeSlot(slot)}
+                            className={`py-3.5 rounded-2xl text-[11px] font-black font-mono transition-all duration-200 border ${
+                              isSlotSelected
+                                ? "bg-[#0D1B3E] text-white border-transparent scale-105 shadow-md shadow-slate-900/15"
+                                : "bg-white hover:bg-slate-50 border-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {slot}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* About and qualifications (below the scheduler) */}
+                  <div className="bg-white p-5 rounded-[28px] border border-slate-100/60 shadow-3xs space-y-4">
+                    <h3 className="font-black text-slate-800 text-xs uppercase tracking-tight">О враче</h3>
+                    <p className="text-[11px] text-slate-600 font-medium leading-relaxed bg-slate-50/50 p-3 rounded-2xl">
+                      {selectedDoctor.bio}
+                    </p>
+
+                    <div className="border-t border-slate-100 pt-4 space-y-3">
+                      <h4 className="font-bold text-[11.5px] text-slate-800 uppercase tracking-tight">Квалификация</h4>
+                      <div className="space-y-2 text-[10.5px] text-slate-600 leading-relaxed font-medium">
+                        <div className="flex gap-2.5 items-start">
+                          <Award className={`w-4 h-4 shrink-0 mt-0.5 ${colors.text}`} />
+                          <p>{selectedDoctor.qualifications}</p>
+                        </div>
+                        <div className="flex gap-2.5 items-start">
+                          <GraduationCap className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+                          <p>{selectedDoctor.academicBackground}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Patient reviews */}
+                  <div className="bg-white p-5 rounded-[28px] border border-slate-100/60 shadow-3xs space-y-4">
+                    <h3 className="font-black text-slate-800 text-xs uppercase tracking-tight">
+                      Отзывы пациентов ({selectedDoctor.reviewsList?.length || 0})
+                    </h3>
+                    <div className="space-y-3">
+                      {(!selectedDoctor.reviewsList || selectedDoctor.reviewsList.length === 0) ? (
+                        <p className="text-[10px] text-slate-400 font-medium text-center py-2">Пока нет отзывов.</p>
+                      ) : (
+                        selectedDoctor.reviewsList.map((review: any, rIdx: number) => (
+                          <div key={rIdx} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100/60 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="font-extrabold text-[11px] text-slate-800">{review.name}</span>
+                              <div className="flex gap-0.5 text-amber-500 text-[10px] font-bold">
+                                {"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-slate-600 font-medium leading-relaxed">{review.text}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Sticky book now call-to-action button matching mockup */}
+                <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-100/60 p-4.5 z-20 max-w-md mx-auto rounded-t-[32px] shadow-lg">
+                  <button 
+                    onClick={() => {
+                      setBookingPatientName(userName !== "Гость" ? userName : "");
+                      setBookingPhone(onboarding.phone || "");
+                      
+                      // Combine selected day date and time slot 
+                      const chosenDate = next7DaysList[selectedDayIndex].dateString;
+                      setBookingDate(`${chosenDate}T${selectedTimeSlot}`);
+                      
+                      setBookingDoctor(selectedDoctor);
+                      setBookingSuccessData(null);
+                      setShowBookingSheet(true);
+                    }}
+                    className={`w-full py-4.5 bg-gradient-to-r ${colors.from} ${colors.to} hover:scale-[1.01] text-white font-black text-xs uppercase tracking-wider rounded-2xl cursor-pointer shadow-lg active:scale-98 transition flex items-center justify-center gap-2`}
+                  >
+                    <Calendar className="w-4 h-4" />
+                    Записаться на {next7DaysList[selectedDayIndex].dayNum} {next7DaysList[selectedDayIndex].dayName} в {selectedTimeSlot}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ========================================================== */}
           {/* SLIDE-UP SHEET: BEST DOCTORS OF 2026 (Nominees Corner)  */}
           {/* ========================================================== */}
           {showBestDoctorSheet && (
@@ -2706,7 +3392,11 @@ export default function App() {
                   {BEST_DOCTORS.map((docItem) => (
                     <div
                       key={docItem.id}
-                      className="bg-white border border-slate-200 rounded-3xl p-4 shadow-2xs flex flex-col gap-3 text-left hover:border-amber-300 transition"
+                      onClick={() => {
+                        setSelectedDoctor(docItem);
+                        setShowBestDoctorSheet(false);
+                      }}
+                      className="bg-white border border-slate-200 rounded-3xl p-4 shadow-2xs flex flex-col gap-3 text-left hover:border-amber-300 transition cursor-pointer active:scale-98"
                     >
                       {/* Avatar and metadata */}
                       <div className="flex gap-3">
@@ -3036,8 +3726,8 @@ export default function App() {
         {/* ========================================== */}
         {/* BOTTOM NAV BAR (Menu bar)                  */}
         {/* ========================================== */}
-        <div className="absolute bottom-4 left-0 right-0 px-4 z-40 select-none pointer-events-none">
-          <div className="bg-white/85 backdrop-blur-lg border border-slate-200/50 shadow-lg px-6 py-2.5 rounded-full flex justify-between items-center pointer-events-auto max-w-[360px] mx-auto">
+        <div className="absolute bottom-4 left-0 right-0 px-2 z-40 select-none pointer-events-none">
+          <div className="bg-white/85 backdrop-blur-lg border border-slate-200/50 shadow-lg px-4 py-2 rounded-full flex justify-between items-center pointer-events-auto max-w-[380px] mx-auto gap-0.5">
             
             {/* Tab 1: Поиск / Главная */}
             <button
@@ -3045,47 +3735,30 @@ export default function App() {
                 setActiveTab("search");
                 setSelectedClinic(null);
               }}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full transition-all duration-300 cursor-pointer ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer ${
                 activeTab === "search" 
                   ? "bg-indigo-600/10 text-indigo-700 font-extrabold" 
                   : "text-slate-400 hover:text-slate-600"
               }`}
             >
-              <Compass className="w-5 h-5 shrink-0" />
-              {activeTab === "search" && <span className="text-[10px] uppercase tracking-wider font-black">Главная</span>}
+              <Compass className="w-4.5 h-4.5 shrink-0" />
+              {activeTab === "search" && <span className="text-[9px] uppercase tracking-wider font-black">Главная</span>}
             </button>
 
-            {/* Tab 2: Блог */}
-            <button
-              onClick={() => {
-                setActiveTab("blog");
-                setSelectedClinic(null);
-              }}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full transition-all duration-300 cursor-pointer relative ${
-                activeTab === "blog" 
-                  ? "bg-indigo-600/10 text-indigo-700 font-extrabold" 
-                  : "text-slate-400 hover:text-slate-600"
-              }`}
-            >
-              <BookOpen className="w-5 h-5 shrink-0" />
-              {activeTab === "blog" && <span className="text-[10px] uppercase tracking-wider font-black">Блог</span>}
-              <span className="absolute top-1 right-2.5 w-1.5 h-1.5 rounded-full bg-indigo-600" />
-            </button>
-
-            {/* Tab 3: Сравнение */}
+            {/* Tab 2: Сравнение */}
             <button
               onClick={() => {
                 setActiveTab("compare");
                 setSelectedClinic(null);
               }}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full transition-all duration-300 cursor-pointer relative ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer relative ${
                 activeTab === "compare" 
                   ? "bg-indigo-600/10 text-indigo-700 font-extrabold" 
                   : "text-slate-400 hover:text-slate-600"
               }`}
             >
-              <GitCompare className="w-5 h-5 shrink-0" />
-              {activeTab === "compare" && <span className="text-[10px] uppercase tracking-wider font-black">Сравнение</span>}
+              <GitCompare className="w-4.5 h-4.5 shrink-0" />
+              {activeTab === "compare" && <span className="text-[9px] uppercase tracking-wider font-black">Сравнение</span>}
               {selectedCompareIds.length > 0 && (
                 <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
                   {selectedCompareIds.length}
@@ -3093,20 +3766,54 @@ export default function App() {
               )}
             </button>
 
-            {/* Tab 4: Профиль */}
+            {/* Tab 3: Парсер и БД */}
+            <button
+              onClick={() => {
+                setActiveTab("admin");
+                setSelectedClinic(null);
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer relative ${
+                activeTab === "admin" 
+                  ? "bg-indigo-600/10 text-indigo-700 font-extrabold" 
+                  : "text-slate-400 hover:text-slate-600"
+              }`}
+            >
+              <Database className="w-4.5 h-4.5 shrink-0" />
+              {activeTab === "admin" && <span className="text-[9px] uppercase tracking-wider font-black">Хакатон</span>}
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            </button>
+
+            {/* Tab 4: Блог */}
+            <button
+              onClick={() => {
+                setActiveTab("blog");
+                setSelectedClinic(null);
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer relative ${
+                activeTab === "blog" 
+                  ? "bg-indigo-600/10 text-indigo-700 font-extrabold" 
+                  : "text-slate-400 hover:text-slate-600"
+              }`}
+            >
+              <BookOpen className="w-4.5 h-4.5 shrink-0" />
+              {activeTab === "blog" && <span className="text-[9px] uppercase tracking-wider font-black">Блог</span>}
+              <span className="absolute top-1 right-2 w-1.5 h-1.5 rounded-full bg-indigo-600" />
+            </button>
+
+            {/* Tab 5: Профиль */}
             <button
               onClick={() => {
                 setActiveTab("profile");
                 setSelectedClinic(null);
               }}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full transition-all duration-300 cursor-pointer ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer ${
                 activeTab === "profile" 
                   ? "bg-indigo-600/10 text-indigo-700 font-extrabold" 
                   : "text-slate-400 hover:text-slate-600"
               }`}
             >
-              <UserIcon className="w-5 h-5 shrink-0" />
-              {activeTab === "profile" && <span className="text-[10px] uppercase tracking-wider font-black">Профиль</span>}
+              <UserIcon className="w-4.5 h-4.5 shrink-0" />
+              {activeTab === "profile" && <span className="text-[9px] uppercase tracking-wider font-black">Профиль</span>}
             </button>
 
           </div>

@@ -513,7 +513,8 @@ function getSimulatedMapMarkers(query: string, city: string) {
         lat: details.lat,
         lng: details.lng,
         address: details.address,
-        osms: c.osms
+        osms: c.osms,
+        rating: c.rating
       };
     }),
     isSimulated: true
@@ -538,6 +539,20 @@ async function startServer() {
       ai = new GoogleGenAI({ apiKey });
     }
     return ai;
+  }
+
+  function cleanAndParseJSON(text: string) {
+    let cleaned = text.trim();
+    if (cleaned.startsWith("```")) {
+      cleaned = cleaned.replace(/^```(?:json)?\s*/i, "");
+      cleaned = cleaned.replace(/\s*```$/, "");
+    }
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    }
+    return JSON.parse(cleaned);
   }
 
   // API Route: AI-powered medical services search with googleSearch grounding
@@ -583,11 +598,11 @@ async function startServer() {
 
       const text = response.text || "";
       try {
-        const parsed = JSON.parse(text);
+        const parsed = cleanAndParseJSON(text);
         parsed.isSimulated = false;
         return res.json(parsed);
       } catch (err) {
-        console.warn("Gemini response is not a clean JSON, falling back to simulated high-fidelity data.", text);
+        console.warn("Gemini response is not a clean JSON, falling back to simulated high-fidelity data.", text, err);
         return res.json(getSimulatedServices(query, city));
       }
     } catch (error) {
@@ -614,6 +629,7 @@ async function startServer() {
 - "lng": Точная или близкая к действительности долгота филиала в г. ${city} (число, например, около 76.889 для Алматы, 71.449 для Астаны, 69.590 для Шымкента, 73.085 для Караганды)
 - "address": Реальный адрес филиала в г. ${city}
 - "osms": Логическое значение (true, если услуга в этой клинике доступна бесплатно по системе ОСМС)
+- "rating": Числовой рейтинг клиники от 3.5 до 5.0 (например, 4.8)
 
 Верните СТРОГИЙ JSON без разметки markdown. Убедитесь, что координаты соответствуют реальному расположению клиник в городе ${city}, чтобы они корректно отображались на интерактивной карте.`;
 
@@ -628,10 +644,11 @@ async function startServer() {
 
       const text = response.text || "";
       try {
-        const parsed = JSON.parse(text);
+        const parsed = cleanAndParseJSON(text);
         parsed.isSimulated = false;
         return res.json(parsed);
       } catch (err) {
+        console.warn("Gemini map-grounding response is not a clean JSON, falling back to simulated high-fidelity data.", text, err);
         return res.json(getSimulatedMapMarkers(query, city));
       }
     } catch (error) {

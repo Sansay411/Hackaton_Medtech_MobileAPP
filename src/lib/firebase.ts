@@ -20,15 +20,7 @@ import {
   orderBy
 } from "firebase/firestore";
 
-// Config matches firebase-applet-config.json
-const firebaseConfig = {
-  apiKey: "AIzaSyC3s5aizreLD2ND-ZE0oEklS17W94Ka2RU",
-  authDomain: "gen-lang-client-0172789583.firebaseapp.com",
-  projectId: "gen-lang-client-0172789583",
-  storageBucket: "gen-lang-client-0172789583.firebasestorage.app",
-  messagingSenderId: "956637156985",
-  appId: "1:956637156985:web:c55d0d7cfdd06959c426a8",
-};
+import firebaseConfig from "../../firebase-applet-config.json";
 
 const app = initializeApp(firebaseConfig);
 
@@ -36,9 +28,8 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
-// Initialize Firestore
-// The workspace setup includes a custom database ID: "ai-studio-medtariffkz-d54de222-81a6-4c32-8bc1-959031b516bf"
-export const db = getFirestore(app, "ai-studio-medtariffkz-d54de222-81a6-4c32-8bc1-959031b516bf");
+// Initialize Firestore using database ID from config
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 export enum OperationType {
   CREATE = 'create',

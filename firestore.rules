@@ -1,18 +1,33 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write for users to manage their profiles (either Firebase Auth users or simulated guest users)
+    // Default safety catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Allow read/write for users
     match /users/{userId} {
       allow read, write: if true;
     }
     
-    // Allow read/write for searchHistory to track pricing queries
+    // Allow read/write for searchHistory
     match /searchHistory/{historyId} {
       allow read, write: if true;
     }
 
     // Allow read/write for appointments
     match /appointments/{appointmentId} {
+      allow read, write: if true;
+    }
+
+    // Allow read/write for clinics (publicly readable, write-back allowed)
+    match /clinics/{clinicId} {
+      allow read, write: if true;
+    }
+
+    // Allow read/write for services (publicly readable, write-back allowed)
+    match /services/{serviceId} {
       allow read, write: if true;
     }
   }
