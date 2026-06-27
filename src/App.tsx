@@ -49,7 +49,7 @@ import {
   Brain,
   Smile
 } from "lucide-react";
-import { onAuthStateChanged, auth, signOut, db, collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, setDoc, handleFirestoreError, OperationType } from "./lib/firebase";
+import { onAuthStateChanged, auth, signOut, db, collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, setDoc, handleFirestoreError, OperationType, deleteDoc } from "./lib/firebase";
 import { Clinic, MapMarker, OnboardingState } from "./types";
 import Logo from "./components/Logo";
 import Onboarding from "./components/Onboarding";
@@ -260,7 +260,7 @@ export default function App() {
   const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
 
   // Bottom Navigation tabs: search, blog, compare, profile, admin
-  const [activeTab, setActiveTab] = useState<"search" | "blog" | "compare" | "profile" | "admin">("search");
+  const [activeTab, setActiveTab] = useState<"search" | "blog" | "compare" | "profile">("search");
   
   // Search query states
   const [searchQuery, setSearchQuery] = useState("ПЦР");
@@ -363,6 +363,14 @@ export default function App() {
   const [showLabSheet, setShowLabSheet] = useState(false);
   const [showSettingsSheet, setShowSettingsSheet] = useState(false);
   const [profileSubTab, setProfileSubTab] = useState<"cabinet" | "loyalty">("cabinet");
+  const [showAlertsSheet, setShowAlertsSheet] = useState(false);
+  const [priceAlerts, setPriceAlerts] = useState<any[]>([]);
+  const [newAlertService, setNewAlertService] = useState("");
+  const [newAlertClinic, setNewAlertClinic] = useState("");
+  const [newAlertPrice, setNewAlertPrice] = useState("");
+  const [newAlertEmail, setNewAlertEmail] = useState("");
+  const [isAlertSubmitting, setIsAlertSubmitting] = useState(false);
+  const [alertSuccess, setAlertSuccess] = useState(false);
   
   // Interactive purple metrics blocks states
   const [userBonuses, setUserBonuses] = useState(220);
@@ -372,6 +380,24 @@ export default function App() {
 
   // History tracking from Firestore
   const [userHistory, setUserHistory] = useState<Array<{ id: string; query: string; city: string; timestamp: string; count: number }>>([]);
+
+  useEffect(() => {
+    if (showAlertsSheet) {
+      const loadAlerts = async () => {
+        try {
+          const querySnapshot = await getDocs(collection(db, "priceSubscriptions"));
+          const list = [];
+          querySnapshot.forEach((doc) => {
+            list.push({ id: doc.id, ...doc.data() });
+          });
+          setPriceAlerts(list);
+        } catch (e) {
+          console.error("Failed to load price alerts:", e);
+        }
+      };
+      loadAlerts();
+    }
+  }, [showAlertsSheet]);
 
   // Auto-search suggestions
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -1072,6 +1098,9 @@ export default function App() {
                         alt="Avatar" 
                         className="w-11 h-11 rounded-full border-2 border-white/40 shadow-sm shrink-0 object-cover"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(userName || 'User')}`;
+                        }}
                       />
                       <div className="text-left">
                         <h3 className="font-extrabold text-sm tracking-tight leading-none text-white">{userName}</h3>
@@ -1251,8 +1280,10 @@ export default function App() {
                 {viewMode === "list" && (
                   <div className="flex-1 overflow-y-auto p-4 pb-28 space-y-4">
 
-                     {/* Gorgeous Reference-styled Home Dashboard (Always visible) */}
-                      <div className="space-y-5 animate-fade-in select-none">
+                     {/* Gorgeous Reference-styled Home Dashboard (Visible only when NOT searching) */}
+                     {!searchQuery ? (
+                      <>
+                        <div className="space-y-5 animate-fade-in select-none">
                         
                         {/* 1. Find Your Specialist (Основные категории) */}
                         <div className="space-y-3 text-left">
@@ -1353,6 +1384,9 @@ export default function App() {
                                 alt="Dr. Masud Khan"
                                 className="absolute bottom-0 right-0 w-full h-full object-cover rounded-2xl border border-white/20 shadow-lg bg-[#E8F3FF]"
                                 referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  e.currentTarget.src = "https://api.dicebear.com/7.x/initials/svg?seed=Masud+Khan";
+                                }}
                               />
                             </div>
                           </div>
@@ -1423,6 +1457,9 @@ export default function App() {
                                     alt={docItem.name} 
                                     className="w-full h-full object-cover"
                                     referrerPolicy="no-referrer"
+                                    onError={(e) => {
+                                      e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(docItem.name)}`;
+                                    }}
                                   />
                                   <span className="absolute bottom-1.5 left-1.5 text-[8px] font-black bg-emerald-500 text-white px-1.5 py-0.5 rounded uppercase">
                                     ОСМС бесплатно
@@ -1462,7 +1499,7 @@ export default function App() {
                       </div>
 
                     {/* Recent list "Недавнее" - Screen 2 / 5 reference layout */}
-                    {clinics.length === 0 && (
+                    {true && (
                       <div className="space-y-4 pt-1">
                         <div className="space-y-3">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block px-1 text-left">
@@ -1512,8 +1549,10 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Clinics search results list */}
-                    <div className="space-y-3 pt-2 text-left border-t border-slate-100">
+                      </>
+                     ) : (
+                      /* Clinics search results list (Visible only when searching) */
+                      <div className="space-y-3 text-left">
                       <div className="flex items-center justify-between px-1">
                         <span className="text-xs font-black text-slate-800 uppercase tracking-tight">
                           {searchQuery ? `Результаты поиска: ${searchQuery}` : `Клиники и предложения в ${onboarding.city}`}
@@ -1568,6 +1607,7 @@ export default function App() {
                       </div>
                     )}
                     </div>
+                     )}
 
                   </div>
                 )}
@@ -1610,6 +1650,9 @@ export default function App() {
                       alt={selectedBlogArticle.title}
                       className="w-full h-48 object-cover rounded-2xl border border-slate-100 shadow-3xs"
                       referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        e.currentTarget.src = "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=80";
+                      }}
                     />
                   )}
 
@@ -1692,6 +1735,9 @@ export default function App() {
                                     alt={article.title}
                                     className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
                                     referrerPolicy="no-referrer"
+                                    onError={(e) => {
+                                      e.currentTarget.src = "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=80";
+                                    }}
                                   />
                                   <div className="absolute top-3 left-3">
                                     <span className={`text-[8px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border shadow-3xs ${tagColor}`}>
@@ -2113,14 +2159,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ========================================== */}
-          {/* TAB 5: HACKATHON ADMIN HUB (Парсер и БД)    */}
-          {/* ========================================== */}
-          {activeTab === "admin" && (
-            <div className="flex-1 flex flex-col overflow-y-auto">
-              <AdminHub currentCity={onboarding.city} />
-            </div>
-          )}
+
 
               {/* ========================================================== */}
               {/* SLIDE-UP SHEET 1: MY FAMILY MEMBERS                        */}
@@ -3169,6 +3208,9 @@ export default function App() {
                         alt={selectedDoctor.name} 
                         className="h-[95%] w-auto object-contain object-bottom transition-all duration-300 scale-105"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(selectedDoctor.name)}`;
+                        }}
                       />
                     </div>
                   </div>
@@ -3766,22 +3808,7 @@ export default function App() {
               )}
             </button>
 
-            {/* Tab 3: Парсер и БД */}
-            <button
-              onClick={() => {
-                setActiveTab("admin");
-                setSelectedClinic(null);
-              }}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer relative ${
-                activeTab === "admin" 
-                  ? "bg-indigo-600/10 text-indigo-700 font-extrabold" 
-                  : "text-slate-400 hover:text-slate-600"
-              }`}
-            >
-              <Database className="w-4.5 h-4.5 shrink-0" />
-              {activeTab === "admin" && <span className="text-[9px] uppercase tracking-wider font-black">Хакатон</span>}
-              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            </button>
+
 
             {/* Tab 4: Блог */}
             <button

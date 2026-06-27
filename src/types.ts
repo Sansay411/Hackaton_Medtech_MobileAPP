@@ -35,3 +35,17 @@ export interface SearchResponse {
   insights: string;
   clinics: Clinic[];
 }
+
+export interface BlogPost {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  city: string;
+  author: string;
+  imageUrl: string;
+  content: string;
+  publishedAt: string;
+  views: number;
+  likes: number;
+}
