@@ -4,9 +4,12 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import XLSX from "xlsx";
-import pdf from "pdf-parse";
 import mammoth from "mammoth";
 import https from "https";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const pdf = require("pdf-parse");
 
 dotenv.config();
 
