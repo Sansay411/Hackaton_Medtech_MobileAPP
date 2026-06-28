@@ -1621,23 +1621,10 @@ ${cleanedText}
         let recordCount = 0, lastRun = null;
         if (isActive) {
           try {
-            const providerKeyword = s.providerClass?.replace(/Provider$/, '').toLowerCase();
-            if (s.url) {
-              const urlHost = s.url.replace(/^https?:\/\//, '').split('/')[0];
-              recordCount = await db.collection("rawTariffs").countDocuments({
-                city: { $regex: new RegExp(s.city || "", "i") },
-                sourceUrl: { $regex: urlHost, $options: "i" },
-              });
-            }
-            if (recordCount === 0 && providerKeyword) {
-              recordCount = await db.collection("rawTariffs").countDocuments({
-                city: { $regex: new RegExp(s.city || "", "i") },
-                $or: [
-                  { clinicName: { $regex: providerKeyword, $options: "i" } },
-                  { sourceUrl: { $regex: providerKeyword, $options: "i" } },
-                ],
-              });
-            }
+            // Count by city only (fast, reliable)
+            recordCount = await db.collection("rawTariffs").countDocuments({
+              city: { $regex: new RegExp(s.city || "", "i") },
+            });
           } catch {}
           try {
             const log = await db.collection("runLogs").findOne({ sourceId: s.id }, { sort: { startedAt: -1 } });

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { RefreshCw, Check, Trash2, Plus, Play, Database, AlertCircle, CheckCircle, XCircle } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { RefreshCw, Check, Trash2, Plus, Play, Database, Terminal } from "lucide-react";
 
 interface SourceItem {
   id: string; name: string; city: string; format: string;
@@ -9,6 +9,8 @@ interface SourceItem {
 export default function SourcesManager() {
   const [sources, setSources] = useState<SourceItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [runningMap, setRunningMap] = useState<Record<string, boolean>>({});
+  const [logs, setLogs] = useState<string[]>(["[СИСТЕМА] Менеджер источников загружен. Выберите источник для запуска парсера."]);
   const [newId, setNewId] = useState("");
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
@@ -17,10 +19,15 @@ export default function SourcesManager() {
   const fetchSources = async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/parser/sources");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const r = await fetch("/api/parser/sources", { signal: controller.signal });
+      clearTimeout(timeout);
       const d = await r.json();
       setSources(d.sources || []);
-    } catch {}
+    } catch (err: any) {
+      console.error("Sources load error:", err);
+    }
     setLoading(false);
   };
 
@@ -60,8 +67,8 @@ export default function SourcesManager() {
 
   return (
     <div className="space-y-6">
-      {/* Stats bar */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Stats bar + Run all button */}
+      <div className="grid grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-blue-50 shadow-xs">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Всего источников</span>
           <p className="text-xl font-black text-slate-800 mt-1">{totalCount}</p>
@@ -73,6 +80,36 @@ export default function SourcesManager() {
         <div className="bg-white p-4 rounded-2xl border border-blue-50 shadow-xs">
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Всего записей</span>
           <p className="text-xl font-black text-blue-600 mt-1">{totalRecords.toLocaleString()}</p>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-blue-50 shadow-xs flex items-center justify-center">
+          <button onClick={async () => {
+            const activeSrcs = sources.filter(s => s.isActive);
+            setLogs([`[СИСТЕМА] Запуск ${activeSrcs.length} активных источников...`]);
+            for (const src of activeSrcs) {
+              setLogs(prev => [...prev, `[${src.id}] Запуск...`]);
+              setRunningMap(prev => ({ ...prev, [src.id]: true }));
+              try {
+                const r = await fetch("/api/parser/run-source", {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ sourceId: src.id }),
+                });
+                const d = await r.json();
+                if (d.result) {
+                  setLogs(prev => [...prev, `[${src.id}] ✅ ${d.result.recordsExtracted} извл, ${d.result.recordsNew} новых (${d.result.durationMs}ms)`]);
+                } else {
+                  setLogs(prev => [...prev, `[${src.id}] ❌ ${d.error || "Ошибка"}`]);
+                }
+              } catch (err: any) {
+                setLogs(prev => [...prev, `[${src.id}] ❌ ${err.message}`]);
+              }
+              setRunningMap(prev => ({ ...prev, [src.id]: false }));
+            }
+            setLogs(prev => [...prev, `[СИСТЕМА] Все источники завершены.`]);
+            fetchSources();
+          }} className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer shadow-sm flex items-center gap-2">
+            <Play className="w-4 h-4" />
+            Запустить все
+          </button>
         </div>
       </div>
 
@@ -114,6 +151,30 @@ export default function SourcesManager() {
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
+                <button onClick={async () => {
+                  setRunningMap(prev => ({ ...prev, [src.id]: true }));
+                  setLogs(prev => [...prev, `[ПАРСЕР] Запуск ${src.name}...`]);
+                  try {
+                    const r = await fetch("/api/parser/run-source", {
+                      method: "POST", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ sourceId: src.id }),
+                    });
+                    const d = await r.json();
+                    if (d.result) {
+                      setLogs(prev => [...prev, `[УСПЕХ] ${src.name}: ${d.result.recordsExtracted} извлечено, ${d.result.recordsNew} новых, ${d.result.durationMs}ms`]);
+                    } else {
+                      setLogs(prev => [...prev, `[ОШИБКА] ${src.name}: ${d.error || "Неизвестная ошибка"}`]);
+                    }
+                  } catch (err: any) {
+                    setLogs(prev => [...prev, `[ОШИБКА] ${src.name}: ${err.message}`]);
+                  }
+                  setRunningMap(prev => ({ ...prev, [src.id]: false }));
+                  fetchSources();
+                }} disabled={runningMap[src.id]}
+                  className="p-2 rounded-lg border border-blue-100 text-blue-500 bg-blue-50/30 hover:bg-blue-50 transition cursor-pointer disabled:opacity-40"
+                  title="Запустить парсер">
+                  <Play className={`w-3.5 h-3.5 ${runningMap[src.id] ? "animate-spin" : ""}`} />
+                </button>
                 <button onClick={() => toggleSource(src.id)}
                   className={`p-2 rounded-lg border transition cursor-pointer ${
                     src.isActive ? "bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-100" : "bg-slate-100 border-slate-200 text-slate-400 hover:text-slate-600"
@@ -165,6 +226,23 @@ export default function SourcesManager() {
             </button>
           </div>
         </form>
+      </div>
+
+      {/* Parser console */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-inner space-y-1.5 max-h-52 overflow-y-auto font-mono text-[10px] text-emerald-400">
+        <div className="flex items-center gap-2 text-slate-500 border-b border-slate-800 pb-2 mb-2 shrink-0 sticky top-0 bg-slate-900">
+          <Terminal className="w-4 h-4" />
+          <span className="font-black uppercase tracking-wider">Консоль парсера</span>
+          <button onClick={() => setLogs(["[СИСТЕМА] Консоль очищена."])} className="ml-auto text-[8px] text-slate-600 hover:text-slate-400 font-bold px-2 py-0.5 rounded border border-slate-700 cursor-pointer">Очистить</button>
+        </div>
+        {logs.map((log, i) => {
+          let color = "text-emerald-400";
+          if (log.includes("[СИСТЕМА]")) color = "text-blue-300";
+          if (log.includes("[УСПЕХ]")) color = "text-emerald-300 font-bold";
+          if (log.includes("[ОШИБКА]")) color = "text-rose-300 font-bold";
+          if (log.includes("[ПАРСЕР]")) color = "text-sky-300";
+          return <div key={i} className={`${color} leading-relaxed`}>{log}</div>;
+        })}
       </div>
     </div>
   );
