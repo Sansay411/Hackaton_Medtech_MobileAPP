@@ -1,364 +1,248 @@
-// Vercel Serverless API — MedTariff.kz
+// MedTariff.kz — Vercel Serverless API
 const express = require("express");
-
 const app = express();
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// ── MongoDB lazy connection ──────────────────────────────────────────
-let _db = null;
-let _client = null;
+// Reconstruct original URL from Vercel rewrite query parameter
+app.use((req, res, next) => {
+  const apiPath = req.query.path;
+  if (apiPath) {
+    req.url = "/api/" + apiPath + (req.url.includes("?") ? "?" + req.url.split("?").slice(1).join("?") : "");
+    delete req.query.path;
+  }
+  next();
+});
+
+// ── MongoDB ────────────────────────────────────────────────────────────
+let _db = null, _client = null;
 async function getDb() {
   if (_db) return _db;
   const { MongoClient } = require("mongodb");
-  const uri = process.env.MONGODB_URI || "mongodb+srv://credox5_db_user:JN9tBLlPhAmdJItC@cluster0.6d5wurd.mongodb.net/test";
-  _client = new MongoClient(uri);
+  _client = new MongoClient(process.env.MONGODB_URI || "");
   await _client.connect();
   _db = _client.db();
-  console.log("[MongoDB] Connected");
   return _db;
 }
 
-// ── Constants ────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────
 const CITY_CENTERS = {
   "алматы": { lat: 43.238, lng: 76.889 },
   "астана": { lat: 51.169, lng: 71.449 },
   "шымкент": { lat: 42.341, lng: 69.590 },
   "караганда": { lat: 49.802, lng: 73.088 },
-  "актобе": { lat: 50.283, lng: 57.926 },
-  "павлодар": { lat: 52.287, lng: 76.931 }
 };
 
-// ── Utilities ────────────────────────────────────────────────────────
+// ── Utils ───────────────────────────────────────────────────────────────
 function getDistanceStr(lat, lng, city) {
   if (!lat || !lng || !city) return "";
-  const center = CITY_CENTERS[city.toLowerCase().trim()];
-  if (!center) return "";
+  const c = CITY_CENTERS[city.toLowerCase().trim()];
+  if (!c) return "";
   const R = 6371;
-  const dLat = (lat - center.lat) * Math.PI / 180;
-  const dLon = (lng - center.lng) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(center.lat*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  const dLat = (lat - c.lat) * Math.PI / 180, dLon = (lng - c.lng) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(c.lat*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLon/2)**2;
   return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))).toFixed(1) + " км";
 }
 
-function getUpdatedStr(parsedAtStr) {
-  if (!parsedAtStr) return "сегодня";
-  try {
-    const d = new Date(parsedAtStr);
-    const now = new Date();
-    const diff = Math.floor((now - d) / 86400000);
-    if (diff === 0) return "сегодня";
-    if (diff === 1) return "вчера";
-    return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
-  } catch { return "сегодня"; }
+function getUpdatedStr(ts) {
+  if (!ts) return "сегодня";
+  const d = new Date(ts), now = new Date();
+  const diff = Math.floor((now - d) / 86400000);
+  if (diff === 0) return "сегодня";
+  if (diff === 1) return "вчера";
+  try { return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" }); } catch { return "сегодня"; }
 }
 
 function normalizeClinicName(name) {
-  const lower = name.toLowerCase().trim();
-  if (lower.includes("инвитро") || lower.includes("invitro") || lower.includes("инвиво") || lower.includes("invivo")) return "Инвитро (Invitro)";
-  if (lower.includes("олимп") || lower.includes("olymp") || lower.includes("кдл")) return "КДЛ Олимп";
-  if (lower.includes("сункар") || lower.includes("sunkar")) return "Сункар";
+  const l = name.toLowerCase().trim();
+  if (l.includes("инвитро") || l.includes("invitro") || l.includes("инвиво") || l.includes("invivo")) return "Инвитро (Invitro)";
+  if (l.includes("олимп") || l.includes("olymp") || l.includes("кдл")) return "КДЛ Олимп";
+  if (l.includes("сункар") || l.includes("sunkar")) return "Сункар";
   return name.trim();
 }
 
-// ── Shared Search Engine ─────────────────────────────────────────────
+// ── Shared search ───────────────────────────────────────────────────────
 async function searchRawTariffs(query, city, allowCrossCity) {
   const db = await getDb();
-  const rawWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const words = rawWords.filter(w => w.length >= 2);
-  const searchWords = words.length > 0 ? words : rawWords;
+  const words = query.trim().toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+  const searchWords = words.length > 0 ? words : [query.trim().toLowerCase()];
 
   const dbCities = await db.collection("rawTariffs").distinct("city");
   const canonicalCity = dbCities.find(c => c.toLowerCase() === city.toLowerCase()) || city;
   const cityFilter = { city: canonicalCity };
 
   let items = [];
-  if (searchWords.length > 0) {
-    const orClauses = searchWords.flatMap(w => [
-      { serviceNameRaw: { $regex: w, $options: "i" } },
-      { serviceNameNorm: { $regex: w, $options: "i" } },
-      { clinicName: { $regex: w, $options: "i" } },
-      { address: { $regex: w, $options: "i" } },
-    ]);
-    items = await db.collection("rawTariffs").find({ ...cityFilter, $or: orClauses }).limit(300).toArray();
+  const orClauses = searchWords.flatMap(w => [
+    { serviceNameRaw: { $regex: w, $options: "i" } },
+    { serviceNameNorm: { $regex: w, $options: "i" } },
+    { clinicName: { $regex: w, $options: "i" } },
+    { address: { $regex: w, $options: "i" } },
+  ]);
+  items = await db.collection("rawTariffs").find({ ...cityFilter, $or: orClauses }).limit(300).toArray();
 
-    if (items.length < 8 && searchWords.some(w => w.length > 4)) {
-      const prefixClauses = searchWords.filter(w => w.length > 4).flatMap(w => {
-        const prefix = w.substring(0, Math.max(3, w.length - 2));
-        return [
-          { serviceNameRaw: { $regex: prefix, $options: "i" } },
-          { serviceNameNorm: { $regex: prefix, $options: "i" } },
-          { clinicName: { $regex: prefix, $options: "i" } },
-        ];
-      });
-      const more = await db.collection("rawTariffs").find({ ...cityFilter, $or: prefixClauses }).limit(200).toArray();
-      const seenIds = new Set(items.map(r => r._id?.toString()));
-      for (const it of more) { if (!seenIds.has(it._id?.toString())) { items.push(it); seenIds.add(it._id?.toString()); } }
-    }
-  } else {
-    items = await db.collection("rawTariffs").find(cityFilter).limit(300).toArray();
+  if (items.length < 8 && searchWords.some(w => w.length > 4)) {
+    const prefixClauses = searchWords.filter(w => w.length > 4).flatMap(w => {
+      const p = w.substring(0, Math.max(3, w.length - 2));
+      return [{ serviceNameRaw: { $regex: p, $options: "i" } }, { serviceNameNorm: { $regex: p, $options: "i" } }, { clinicName: { $regex: p, $options: "i" } }];
+    });
+    const more = await db.collection("rawTariffs").find({ ...cityFilter, $or: prefixClauses }).limit(200).toArray();
+    const seen = new Set(items.map(r => r._id?.toString()));
+    for (const it of more) { if (!seen.has(it._id?.toString())) { items.push(it); seen.add(it._id?.toString()); } }
   }
 
-  let fromOtherCities = false;
+  let fromOther = false;
   if (items.length === 0 && allowCrossCity && searchWords.length > 0) {
-    const crossClauses = searchWords.flatMap(w => [
-      { serviceNameRaw: { $regex: w, $options: "i" } },
-      { serviceNameNorm: { $regex: w, $options: "i" } },
-      { clinicName: { $regex: w, $options: "i" } },
-    ]);
-    items = await db.collection("rawTariffs").find({ $or: crossClauses }).limit(100).toArray();
-    fromOtherCities = items.length > 0;
+    items = await db.collection("rawTariffs").find({ $or: orClauses }).limit(100).toArray();
+    fromOther = items.length > 0;
   }
-
-  return { items, fromOtherCities };
+  return { items, fromOtherCities: fromOther };
 }
 
-// ── Logo helpers ─────────────────────────────────────────────────────
 async function getLogoMap(db) {
-  const map = new Map();
+  const m = new Map();
   try {
-    const logos = await db.collection("clinicLogos").find({}).toArray();
-    for (const l of logos) {
-      const n = normalizeClinicName(l.clinicName || l.name || "");
-      if (l.logoUrl) map.set(n.toLowerCase(), l.logoUrl);
+    for (const l of await db.collection("clinicLogos").find({}).toArray()) {
+      if (l.logoUrl) m.set(normalizeClinicName(l.clinicName || l.name || "").toLowerCase(), l.logoUrl);
     }
-    const clinics = await db.collection("clinics").find({}).toArray();
-    for (const c of clinics) {
-      const n = normalizeClinicName(c.name || "");
-      if (c.logoUrl) map.set(n.toLowerCase(), c.logoUrl);
+    for (const c of await db.collection("clinics").find({}).toArray()) {
+      if (c.logoUrl) m.set(normalizeClinicName(c.name || "").toLowerCase(), c.logoUrl);
     }
   } catch {}
-  return map;
+  return m;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════
 //  API ROUTES
-// ═══════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════
 
-// ── Search ────────────────────────────────────────────────────────────
 app.post("/api/search-services", async (req, res) => {
   try {
     const { query, city = "Алматы" } = req.body;
-    if (!query || !query.trim()) return res.json({ error: "Search query is required" });
-
+    if (!query?.trim()) return res.json({ error: "Query required" });
     const db = await getDb();
     const { items: rawItems, fromOtherCities } = await searchRawTariffs(query, city, true);
-
-    if (rawItems.length === 0) {
-      return res.json({ insights: `По запросу "${query}" в г. ${city} ничего не найдено.`, clinics: [], isSimulated: false });
-    }
+    if (!rawItems.length) return res.json({ insights: `По запросу "${query}" в г. ${city} ничего не найдено.`, clinics: [], isSimulated: false });
 
     const groupedMap = new Map();
-    for (const item of rawItems) {
-      const key = normalizeClinicName(item.clinicName);
-      if (!groupedMap.has(key)) groupedMap.set(key, []);
-      groupedMap.get(key).push(item);
+    for (const it of rawItems) {
+      const k = normalizeClinicName(it.clinicName);
+      if (!groupedMap.has(k)) groupedMap.set(k, []);
+      groupedMap.get(k).push(it);
     }
-
     const logoMap = await getLogoMap(db);
-    const cityCenter = CITY_CENTERS[city.toLowerCase().trim()] || CITY_CENTERS["алматы"];
+    const center = CITY_CENTERS[city.toLowerCase().trim()] || CITY_CENTERS["алматы"];
     const clinicsList = [];
-    let idx = 0;
-
-    for (const [clinicName, items] of groupedMap) {
-      idx++;
-      let bestItem = items[0], bestDist = Infinity;
-      for (const it of items) {
-        if (it.lat && it.lng) {
-          const d = Math.abs(it.lat - cityCenter.lat) + Math.abs(it.lng - cityCenter.lng);
-          if (d < bestDist) { bestDist = d; bestItem = it; }
-        }
-      }
-      const prices = items.map(it => it.priceKzt).filter(p => typeof p === "number" && p > 0);
-      const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
-      const logoUrl = logoMap.get(clinicName.toLowerCase()) || "";
-
+    for (const [name, items] of groupedMap) {
+      let best = items[0], bestD = Infinity;
+      for (const it of items) { if (it.lat && it.lng) { const d = Math.abs(it.lat-center.lat)+Math.abs(it.lng-center.lng); if (d < bestD) { bestD = d; best = it; } } }
+      const prices = items.map(i => i.priceKzt).filter(p => typeof p === "number" && p > 0);
       clinicsList.push({
-        id: bestItem.clinicId || `clinic-${idx}-${clinicName.toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")}`,
-        name: clinicName, price: minPrice,
-        address: bestItem.address || "Адрес не указан", district: "",
-        distance: getDistanceStr(bestItem.lat, bestItem.lng, city),
-        osms: items.some(it => it.osmsEligible),
-        updated: getUpdatedStr(bestItem.parsedAt),
-        phone: bestItem.phone || "Телефон не указан", rating: 4.5,
-        lat: bestItem.lat, lng: bestItem.lng, logoUrl,
-        services: items.map(it => ({
-          serviceNameRaw: it.serviceNameRaw, serviceNameNorm: it.serviceNameNorm,
-          priceKzt: it.priceKzt, osmsEligible: it.osmsEligible,
-        })),
+        id: best.clinicId || `c-${name.toLowerCase().replace(/[^a-zа-яё0-9]/g,"-")}`,
+        name, price: prices.length ? Math.min(...prices) : 0,
+        address: best.address || "", district: "",
+        distance: getDistanceStr(best.lat, best.lng, city),
+        osms: items.some(i => i.osmsEligible),
+        updated: getUpdatedStr(best.parsedAt),
+        phone: best.phone || "", rating: 4.5,
+        lat: best.lat, lng: best.lng,
+        logoUrl: logoMap.get(name.toLowerCase()) || "",
+        services: items.map(i => ({ serviceNameRaw: i.serviceNameRaw, serviceNameNorm: i.serviceNameNorm, priceKzt: i.priceKzt, osmsEligible: i.osmsEligible })),
       });
     }
-
-    const allPrices = rawItems.map(it => it.priceKzt).filter(Boolean);
-    const minP = allPrices.length ? Math.min(...allPrices) : 0;
-    const maxP = allPrices.length ? Math.max(...allPrices) : 0;
-    const avgP = allPrices.length ? Math.round(allPrices.reduce((a,b)=>a+b,0)/allPrices.length) : 0;
-    const osmsCount = rawItems.filter(it => it.osmsEligible).length;
+    const allP = rawItems.map(i => i.priceKzt).filter(Boolean);
     const locInfo = fromOtherCities ? " (показаны результаты из других городов)" : "";
-
     res.json({
-      insights: `По запросу "${query}" в г. ${city} найдено ${rawItems.length} тарифов. Цены: ${minP.toLocaleString()}–${maxP.toLocaleString()} ₸ (средняя: ${avgP.toLocaleString()} ₸). ОСМС: ${osmsCount}${locInfo}.`,
+      insights: `Найдено ${rawItems.length} тарифов. Цены: ${Math.min(...allP).toLocaleString()}–${Math.max(...allP).toLocaleString()} ₸ (ср: ${Math.round(allP.reduce((a,b)=>a+b,0)/allP.length).toLocaleString()} ₸)${locInfo}.`,
       clinics: clinicsList, isSimulated: false,
     });
-  } catch (error) { console.error("Search failed:", error); res.json({ insights: "Поиск временно недоступен", clinics: [], isSimulated: false }); }
+  } catch (e) { console.error(e); res.json({ insights: "Ошибка поиска", clinics: [], isSimulated: false }); }
 });
 
-// ── Map Grounding ─────────────────────────────────────────────────────
 app.post("/api/map-grounding", async (req, res) => {
   try {
     const { query, city = "Алматы" } = req.body;
-    if (!query || !query.trim()) return res.json({ markers: [] });
-
+    if (!query?.trim()) return res.json({ markers: [] });
     const db = await getDb();
     const { items: rawItems } = await searchRawTariffs(query, city, false);
-    if (rawItems.length === 0) return res.json({ markers: [], isSimulated: false });
+    if (!rawItems.length) return res.json({ markers: [], isSimulated: false });
 
     const groupedMap = new Map();
-    for (const item of rawItems) {
-      const key = normalizeClinicName(item.clinicName);
-      if (!groupedMap.has(key)) groupedMap.set(key, []);
-      groupedMap.get(key).push(item);
+    for (const it of rawItems) {
+      const k = normalizeClinicName(it.clinicName);
+      if (!groupedMap.has(k)) groupedMap.set(k, []);
+      groupedMap.get(k).push(it);
     }
-
     const logoMap = await getLogoMap(db);
-    const cityCenter = CITY_CENTERS[city.toLowerCase().trim()] || CITY_CENTERS["алматы"];
-    const markersList = [];
-    const seenNames = new Set();
-    let idx = 0;
-
-    for (const [clinicName, items] of groupedMap) {
-      if (seenNames.has(clinicName.toLowerCase())) continue;
-      seenNames.add(clinicName.toLowerCase());
-      idx++;
-
-      let bestItem = items[0], bestDist = Infinity;
-      for (const it of items) {
-        if (it.lat && it.lng) {
-          const d = Math.abs(it.lat - cityCenter.lat) + Math.abs(it.lng - cityCenter.lng);
-          if (d < bestDist) { bestDist = d; bestItem = it; }
-        }
-      }
-
-      const coordOk = bestItem.lat && bestItem.lng
-        && Math.abs(bestItem.lat - cityCenter.lat) < 1.5
-        && Math.abs(bestItem.lng - cityCenter.lng) < 1.5;
-      const prices = items.map(it => it.priceKzt).filter(p => typeof p === "number" && p > 0);
-      const logoUrl = logoMap.get(clinicName.toLowerCase()) || "";
-
-      markersList.push({
-        id: `marker-${idx}-${clinicName.toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")}`,
-        name: clinicName,
-        price: prices.length > 0 ? Math.min(...prices) : 0,
-        lat: coordOk ? bestItem.lat : cityCenter.lat,
-        lng: coordOk ? bestItem.lng : cityCenter.lng,
-        address: bestItem.address || "Адрес не указан",
-        osms: items.some(it => it.osmsEligible),
-        rating: 4.5, logoUrl,
+    const center = CITY_CENTERS[city.toLowerCase().trim()] || CITY_CENTERS["алматы"];
+    const markers = [];
+    for (const [name, items] of groupedMap) {
+      let best = items[0], bestD = Infinity;
+      for (const it of items) { if (it.lat && it.lng) { const d = Math.abs(it.lat-center.lat)+Math.abs(it.lng-center.lng); if (d < bestD) { bestD = d; best = it; } } }
+      const coordOk = best.lat && best.lng && Math.abs(best.lat-center.lat)<1.5 && Math.abs(best.lng-center.lng)<1.5;
+      const prices = items.map(i => i.priceKzt).filter(p => typeof p === "number" && p > 0);
+      markers.push({
+        id: `m-${name.toLowerCase().replace(/[^a-zа-яё0-9]/g,"-")}`,
+        name, price: prices.length ? Math.min(...prices) : 0,
+        lat: coordOk ? best.lat : center.lat, lng: coordOk ? best.lng : center.lng,
+        address: best.address || "", osms: items.some(i => i.osmsEligible),
+        rating: 4.5, logoUrl: logoMap.get(name.toLowerCase()) || "",
       });
     }
-
-    res.json({ markers: markersList, isSimulated: false });
-  } catch (error) { console.error("Map failed:", error); res.json({ markers: [], isSimulated: false }); }
+    res.json({ markers, isSimulated: false });
+  } catch (e) { console.error(e); res.json({ markers: [], isSimulated: false }); }
 });
 
-// ── Parser Sources ────────────────────────────────────────────────────
 app.get("/api/parser/sources", async (_req, res) => {
+  const src = [
+    { id:"kdl-olymp-almaty",name:"КДЛ Олимп (Алматы)",url:"https://kdlolymp.kz",city:"Алматы",format:"html",isActive:true,status:"ok" },
+    { id:"kdl-olymp-astana",name:"КДЛ Олимп (Астана)",url:"https://kdlolymp.kz/astana",city:"Астана",format:"html",isActive:true,status:"ok" },
+    { id:"kdl-olymp-shymkent",name:"КДЛ Олимп (Шымкент)",url:"https://kdlolymp.kz/shymkent",city:"Шымкент",format:"html",isActive:true,status:"ok" },
+    { id:"invitro-almaty",name:"Инвитро (Алматы)",url:"https://invitro.kz/analizes/for-doctors/almaty/",city:"Алматы",format:"html",isActive:true,status:"ok" },
+    { id:"invitro-astana",name:"Инвитро (Астана)",url:"https://invitro.kz/analizes/for-doctors/astana/",city:"Астана",format:"html",isActive:true,status:"ok" },
+    { id:"invitro-karaganda",name:"Инвитро (Караганда)",url:"https://invitro.kz/analizes/for-doctors/karaganda/",city:"Караганда",format:"html",isActive:true,status:"ok" },
+    { id:"invitro-shymkent",name:"Инвитро (Шымкент)",url:"https://invitro.kz/analizes/for-doctors/shymkent/",city:"Шымкент",format:"html",isActive:true,status:"ok" },
+    { id:"topdoc-almaty-lab",name:"TopDoc.kz (Алматы)",url:"https://www.topdoc.kz/almaty/laboratories/",city:"Алматы",format:"html",isActive:true,status:"ok" },
+    { id:"topdoc-astana-lab",name:"TopDoc.kz (Астана)",url:"https://www.topdoc.kz/astana/laboratories/",city:"Астана",format:"html",isActive:true,status:"ok" },
+    { id:"dgis-almaty",name:"2GIS (Алматы)",url:"",city:"Алматы",format:"json-api",isActive:true,status:"ok" },
+    { id:"dgis-astana",name:"2GIS (Астана)",url:"",city:"Астана",format:"json-api",isActive:true,status:"ok" },
+    { id:"dgis-karaganda",name:"2GIS (Караганда)",url:"",city:"Караганда",format:"json-api",isActive:true,status:"ok" },
+    { id:"dgis-shymkent",name:"2GIS (Шымкент)",url:"",city:"Шымкент",format:"json-api",isActive:true,status:"ok" },
+  ];
   try {
-    const PARSER_SOURCES = [
-      { id: "kdl-olymp-almaty", name: "КДЛ Олимп (Алматы)", providerClass: "KdlProvider", url: "https://kdlolymp.kz", city: "Алматы", format: "html", isActive: true, description: "Лабораторные анализы KDL", status: "ok" },
-      { id: "kdl-olymp-astana", name: "КДЛ Олимп (Астана)", providerClass: "KdlProvider", url: "https://kdlolymp.kz/astana", city: "Астана", format: "html", isActive: true, description: "Лабораторные анализы KDL", status: "ok" },
-      { id: "kdl-olymp-shymkent", name: "КДЛ Олимп (Шымкент)", providerClass: "KdlProvider", url: "https://kdlolymp.kz/shymkent", city: "Шымкент", format: "html", isActive: true, description: "Лабораторные анализы KDL", status: "ok" },
-      { id: "invitro-almaty", name: "Инвитро (Алматы)", providerClass: "InvitroProvider", url: "https://invitro.kz/analizes/for-doctors/almaty/", city: "Алматы", format: "html", isActive: true, description: "Лабораторные исследования Invitro", status: "ok" },
-      { id: "invitro-astana", name: "Инвитро (Астана)", providerClass: "InvitroProvider", url: "https://invitro.kz/analizes/for-doctors/astana/", city: "Астана", format: "html", isActive: true, description: "Лабораторные исследования Invitro", status: "ok" },
-      { id: "invitro-karaganda", name: "Инвитро (Караганда)", providerClass: "InvitroProvider", url: "https://invitro.kz/analizes/for-doctors/karaganda/", city: "Караганда", format: "html", isActive: true, description: "Лабораторные исследования Invitro", status: "ok" },
-      { id: "invitro-shymkent", name: "Инвитро (Шымкент)", providerClass: "InvitroProvider", url: "https://invitro.kz/analizes/for-doctors/shymkent/", city: "Шымкент", format: "html", isActive: true, description: "Лабораторные исследования Invitro", status: "ok" },
-      { id: "topdoc-almaty-laboratories", name: "TopDoc.kz (Лаб. Алматы)", providerClass: "TopdocProvider", url: "https://www.topdoc.kz/almaty/laboratories/", city: "Алматы", format: "html", isActive: true, description: "Агрегатор клиник", status: "ok" },
-      { id: "topdoc-almaty-clinics", name: "TopDoc.kz (Клиники Алматы)", providerClass: "TopdocProvider", url: "https://www.topdoc.kz/almaty/clinics/", city: "Алматы", format: "html", isActive: true, description: "Медицинские центры", status: "ok" },
-      { id: "topdoc-astana-laboratories", name: "TopDoc.kz (Лаб. Астана)", providerClass: "TopdocProvider", url: "https://www.topdoc.kz/astana/laboratories/", city: "Астана", format: "html", isActive: true, description: "Лаборатории Астаны", status: "ok" },
-      { id: "dgis-almaty", name: "2GIS (Алматы)", providerClass: "DgisProvider", url: "", city: "Алматы", format: "json-api", isActive: true, description: "Клиники Алматы через 2GIS", status: "ok" },
-      { id: "dgis-astana", name: "2GIS (Астана)", providerClass: "DgisProvider", url: "", city: "Астана", format: "json-api", isActive: true, description: "Клиники Астаны через 2GIS", status: "ok" },
-      { id: "dgis-karaganda", name: "2GIS (Караганда)", providerClass: "DgisProvider", url: "", city: "Караганда", format: "json-api", isActive: true, description: "Клиники Караганды через 2GIS", status: "ok" },
-      { id: "dgis-shymkent", name: "2GIS (Шымкент)", providerClass: "DgisProvider", url: "", city: "Шымкент", format: "json-api", isActive: true, description: "Клиники Шымкента через 2GIS", status: "ok" },
-    ];
     const db = await getDb();
-    const sources = await Promise.all(PARSER_SOURCES.map(async (s) => {
-      let recordCount = 0, lastRun = null;
-      if (s.isActive) {
-        try { recordCount = await db.collection("rawTariffs").countDocuments({ city: { $regex: new RegExp(s.city, "i") } }); } catch {}
-        try { const log = await db.collection("runLogs").findOne({ sourceId: s.id }, { sort: { startedAt: -1 } }); if (log) lastRun = log.completedAt || log.startedAt; } catch {}
-      }
-      return { id: s.id, name: s.name, url: s.url, city: s.city, format: s.format, isActive: s.isActive, description: s.description, status: s.status || (s.isActive ? "unknown" : "disabled"), recordCount, lastRun };
+    const out = await Promise.all(src.map(async s => {
+      let rc = 0, lr = null;
+      try { rc = await db.collection("rawTariffs").countDocuments({ city: { $regex: new RegExp(s.city, "i") } }); } catch {}
+      try { const log = await db.collection("runLogs").findOne({ sourceId: s.id }, { sort: { startedAt: -1 } }); if (log) lr = log.completedAt || log.startedAt; } catch {}
+      return { ...s, description: s.name, recordCount: rc, lastRun: lr };
     }));
-    res.json({ sources });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    res.json({ sources: out });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Raw Tariffs ──────────────────────────────────────────────────────
 app.get("/api/parser/raw-tariffs", async (req, res) => {
-  try {
-    const db = await getDb();
-    const city = req.query.city;
-    const query = city ? { city: { $regex: new RegExp(city, "i") } } : {};
-    const records = await db.collection("rawTariffs").find(query).limit(500).toArray();
-    res.json({ records, total: records.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  try { const db = await getDb(); const q = req.query.city ? { city: { $regex: new RegExp(req.query.city, "i") } } : {}; const r = await db.collection("rawTariffs").find(q).limit(500).toArray(); res.json({ records: r, total: r.length }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Run Logs ─────────────────────────────────────────────────────────
 app.get("/api/parser/run-logs", async (req, res) => {
-  try {
-    const db = await getDb();
-    const logs = await db.collection("runLogs").find().sort({ startedAt: -1 }).limit(Number(req.query.limit) || 50).toArray();
-    res.json({ logs });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  try { const db = await getDb(); const logs = await db.collection("runLogs").find().sort({ startedAt: -1 }).limit(Number(req.query.limit) || 50).toArray(); res.json({ logs }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Last Run ─────────────────────────────────────────────────────────
 app.get("/api/parser/last-run", async (_req, res) => {
-  try {
-    const db = await getDb();
-    const lastLog = await db.collection("runLogs").findOne({ isSuccessful: true }, { sort: { startedAt: -1 } });
-    if (lastLog) return res.json({ success: true, timestamp: lastLog.startedAt || lastLog.completedAt });
-    const lastTariff = await db.collection("rawTariffs").findOne({ parsedAt: { $exists: true } }, { sort: { parsedAt: -1 } });
-    res.json({ success: true, timestamp: lastTariff?.parsedAt || new Date().toISOString() });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  try { const db = await getDb(); const l = await db.collection("runLogs").findOne({ isSuccessful: true }, { sort: { startedAt: -1 } }); if (l) return res.json({ success: true, timestamp: l.startedAt || l.completedAt }); const t = await db.collection("rawTariffs").findOne({ parsedAt: { $exists: true } }, { sort: { parsedAt: -1 } }); res.json({ success: true, timestamp: t?.parsedAt || new Date().toISOString() }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Clinic Logos ─────────────────────────────────────────────────────
 app.get("/api/clinics/logos", async (_req, res) => {
-  try {
-    const db = await getDb();
-    const list = await db.collection("clinicLogos").find({}).toArray();
-    res.json(list.map(({ _id, ...r }) => ({ id: r.id || String(_id), ...r })));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  try { const db = await getDb(); const list = await db.collection("clinicLogos").find({}).toArray(); res.json(list.map(({ _id, ...r }) => ({ id: r.id || String(_id), ...r }))); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── MongoDB CRUD bridge ──────────────────────────────────────────────
 app.get("/api/db/:collection", async (req, res) => {
-  try {
-    const db = await getDb();
-    const query = {};
-    for (const [k, v] of Object.entries(req.query)) { if (v) query[k] = v; }
-    const list = await db.collection(req.params.collection).find(query).toArray();
-    res.json(list.map(({ _id, ...r }) => ({ id: r.id || String(_id), ...r })));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  try { const db = await getDb(); const q = {}; for (const [k, v] of Object.entries(req.query)) { if (v) q[k] = v; } const list = await db.collection(req.params.collection).find(q).toArray(); res.json(list.map(({ _id, ...r }) => ({ id: r.id || String(_id), ...r }))); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post("/api/db/:collection", async (req, res) => {
-  try {
-    const db = await getDb();
-    const data = req.body;
-    const id = data.id || String(Date.now() + Math.random().toString(36).slice(2, 6));
-    const { _id, ...payload } = { ...data, id };
-    await db.collection(req.params.collection).updateOne({ id }, { $set: payload }, { upsert: true });
-    res.json({ success: true, id });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  try { const db = await getDb(); const d = req.body; const id = d.id || String(Date.now() + Math.random().toString(36).slice(2,6)); const { _id, ...p } = { ...d, id }; await db.collection(req.params.collection).updateOne({ id }, { $set: p }, { upsert: true }); res.json({ success: true, id }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Health check ─────────────────────────────────────────────────────
-app.get("/api/health", (_req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
+app.get("/api/health", (_req, res) => res.json({ status: "ok", ts: new Date().toISOString() }));
 
-// ═══════════════════════════════════════════════════════════════════════
-//  Export for Vercel (NO app.listen — Vercel handles the HTTP server)
-// ═══════════════════════════════════════════════════════════════════════
 module.exports = app;
