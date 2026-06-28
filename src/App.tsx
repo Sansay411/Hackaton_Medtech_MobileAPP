@@ -3349,7 +3349,7 @@ export default function App() {
             const activeSlots = timePeriod === "morning" ? morningSlots : afternoonSlots;
 
             return (
-              <div className="fixed inset-0 bg-[#F4F7FE] z-50 flex flex-col overflow-y-auto no-scrollbar animate-fade-in text-left">
+              <div className="fixed inset-0 bg-[#F4F7FE] z-[60] flex flex-col overflow-y-auto no-scrollbar animate-fade-in text-left max-w-md mx-auto w-full">
                 {/* Header matching mock-up screen exactly */}
                 <div className="sticky top-0 bg-[#F4F7FE]/90 backdrop-blur-md px-5 py-4 flex items-center justify-between z-10">
                   <button 
@@ -3958,7 +3958,9 @@ export default function App() {
         {/* ========================================== */}
         {/* Фиксированная адаптивная панель вкладок для всех мобильных устройств */}
         <div 
-          className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2 z-50 select-none pointer-events-none"
+          className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2 z-50 select-none pointer-events-none transition-all duration-300 ${
+            hasActiveOverlay ? "opacity-0 pointer-events-none translate-y-12" : "opacity-100"
+          }`}
         >
           <div className="bg-white/90 backdrop-blur-xl border border-slate-200/80 shadow-2xl px-3 py-2.5 rounded-[2rem] flex justify-around items-center pointer-events-auto w-full gap-1 shadow-blue-900/5">
             

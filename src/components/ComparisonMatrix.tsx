@@ -43,7 +43,7 @@ export default function ComparisonMatrix({
   const maxRating = ratings.length > 0 ? Math.max(...ratings) : 0;
 
   return (
-    <div id="comparison-matrix-sheet" className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-md flex items-end justify-center animate-fade-in p-2 sm:p-4">
+    <div id="comparison-matrix-sheet" className="fixed inset-0 z-[60] bg-slate-950/40 backdrop-blur-md flex items-end justify-center animate-fade-in p-2 sm:p-4">
       {/* Frosted White Glass Sheet */}
       <div className="w-full max-w-lg bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl border border-white/60 flex flex-col max-h-[92vh] overflow-hidden animate-slide-up">
         
