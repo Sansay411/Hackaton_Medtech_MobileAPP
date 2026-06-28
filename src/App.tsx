@@ -757,91 +757,52 @@ export default function App() {
     }));
   };
 
-  // Mode 2: Static Database Search (DB-Mode)
+  // Mode 2: Static Database Search (DB-Mode) - Fast MongoDB Atlas
   const executeStaticDBSearch = async (queryText: string, searchCity: string) => {
     try {
-      console.log(`DB-Mode: Querying local MongoDB database for: "${queryText}" in ${searchCity}`);
-      const q = query(
-        collection(db, "services"),
-        where("city", "==", searchCity)
-      );
-      const querySnapshot = await getDocs(q);
-      let matchedService: any = null;
-      
-      querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        const docNameLower = data?.name?.toLowerCase() || "";
-        const queryTextLower = queryText?.toLowerCase() || "";
-        if (docNameLower && queryTextLower && (docNameLower.includes(queryTextLower) || queryTextLower.includes(docNameLower))) {
-          matchedService = data;
-        }
+      console.log(`DB-Mode: Querying fast backend MongoDB database for: "${queryText}" in ${searchCity}`);
+      const res = await fetch("/api/search-services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: queryText, city: searchCity })
       });
+      if (!res.ok) return false;
+      
+      const servicesData = await res.json();
+      const fetchedClinics = servicesData.clinics || [];
+      if (fetchedClinics.length === 0) return false;
 
-      if (matchedService) {
-        console.log("DB-Mode: Match found in MongoDB:", matchedService.name);
-        const clinicsSnapshot = await getDocs(query(collection(db, "clinics"), where("city", "==", searchCity)));
-        const dbClinicsMap: Record<string, any> = {};
-        clinicsSnapshot.forEach(docSnap => {
-          dbClinicsMap[docSnap.id] = docSnap.data();
-        });
+      const enrichedClinics = enrichWithInflationAndTimestamp(fetchedClinics);
+      setClinics(enrichedClinics);
+      
+      const stats = servicesData.stats || { min: 0, avg: 0 };
+      setMarketInsights(`ИИ-Аналитика (БД-Режим): На основе исторических данных в MongoDB, минимальная цена на "${queryText}" в г. ${searchCity} составляет ${stats.min.toLocaleString()} ₸, средняя — ${stats.avg.toLocaleString()} ₸. Услуга проанализирована и проиндексирована в системе.`);
+      setIsSimulatedMode(false);
 
-        const clinicsList: Clinic[] = matchedService.clinicPrices.map((cp: any) => {
-          const fullClinic = dbClinicsMap[cp.clinicId];
-          return {
-            id: cp.clinicId,
-            name: cp.clinicName,
-            price: cp.price,
-            address: fullClinic?.address || "ул. Кабанбай батыра, 21",
-            district: fullClinic?.district || "Центральный р-н",
-            distance: fullClinic?.distance || "2.1 км",
-            osms: fullClinic?.osms || false,
-            updated: cp.updated || "из базы данных",
-            phone: fullClinic?.phone || "+7 (707) 123-45-00",
-            rating: fullClinic?.rating || 4.5
-          };
-        });
+      // Group and filter: keep only top 5 cheapest/best clinics on the map
+      const sortedDbClinics = [...fetchedClinics].sort((a, b) => a.price - b.price);
+      const top5DbClinics = sortedDbClinics.slice(0, 5);
 
-        const enrichedClinics = enrichWithInflationAndTimestamp(clinicsList);
-        setClinics(enrichedClinics);
-        setMarketInsights(`ИИ-Аналитика (БД-Режим): На основе исторических данных в MongoDB, минимальная цена на "${matchedService.name}" в г. ${searchCity} составляет ${matchedService.minPrice.toLocaleString()} ₸, средняя — ${matchedService.averagePrice.toLocaleString()} ₸. Услуга привязана к государственному коду МЗ РК ${matchedService.code}.`);
-        setIsSimulatedMode(false);
-
-        const getCityFallbackCoords = (city: string) => {
-          const lower = city.toLowerCase();
-          if (lower.includes("астана")) return { lat: 51.169392, lng: 71.449074 };
-          if (lower.includes("шымкент")) return { lat: 42.3417, lng: 69.5901 };
-          if (lower.includes("караганда")) return { lat: 49.8022, lng: 73.0881 };
-          return { lat: 43.238940, lng: 76.889709 }; // Almaty default
+      const resolvedMarkers: MapMarker[] = top5DbClinics.map((c) => {
+        return {
+          id: c.id,
+          name: c.name,
+          price: c.price,
+          lat: c.lat,
+          lng: c.lng,
+          address: c.address,
+          osms: c.osms,
+          rating: c.rating || 4.5,
+          logoUrl: c.logoUrl || "",
         };
-        const cityCenter = getCityFallbackCoords(searchCity);
-
-        const sortedDbClinics = [...clinicsList].sort((a, b) => a.price - b.price);
-        const top5DbClinics = sortedDbClinics.slice(0, 5);
-
-        const resolvedMarkers: MapMarker[] = top5DbClinics.map((c, i) => {
-          const fullClinic = dbClinicsMap[c.id];
-          const latFallback = cityCenter.lat + (i - 2) * 0.007;
-          const lngFallback = cityCenter.lng + (i - 2) * 0.009 * (Math.sin(i) || 1);
-          return {
-            id: c.id,
-            name: c.name,
-            price: c.price,
-            lat: fullClinic?.lat || latFallback,
-            lng: fullClinic?.lng || lngFallback,
-            address: c.address,
-            osms: c.osms,
-            rating: c.rating || fullClinic?.rating || 4.5
-          };
-        });
-        setMarkers(resolvedMarkers);
-        if (clinicsList.length > 0) {
-          setActiveMarkerId(clinicsList[0].id);
-        }
-        return true;
+      });
+      setMarkers(resolvedMarkers);
+      if (fetchedClinics.length > 0) {
+        setActiveMarkerId(fetchedClinics[0].id);
       }
-      return false;
+      return true;
     } catch (err) {
-      console.warn("DB-Mode: Error querying MongoDB:", err);
+      console.warn("DB-Mode: Error querying MongoDB backend:", err);
       return false;
     }
   };
