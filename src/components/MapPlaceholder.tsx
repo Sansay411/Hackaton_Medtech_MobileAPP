@@ -303,14 +303,18 @@ export default function MapPlaceholder({
 
   // When "Маршрут" clicked: calculate distance and draw route polyline
   useEffect(() => {
-    if (isRoutingActive && activeMarkerId && mapInstance && activeRouteRef.current) {
+    let routePolyline: any = null;
+
+    if (isRoutingActive && activeMarkerId && mapInstance) {
       const { markers, userLocation, currentCenter } = routePropsRef.current;
       const marker = markers.find(m => m.id === activeMarkerId);
       if (marker) {
         const fromLat = userLocation?.lat || currentCenter.lat;
         const fromLng = userLocation?.lng || currentCenter.lng;
-        const toLat = marker.lat;
-        const toLng = marker.lng;
+        const toLat = marker.lat || currentCenter.lat;
+        const toLng = marker.lng || currentCenter.lng;
+
+        // Calculate geodesic distance
         const R = 6371;
         const dLat = (toLat - fromLat) * Math.PI / 180;
         const dLon = (toLng - fromLng) * Math.PI / 180;
@@ -318,27 +322,39 @@ export default function MapPlaceholder({
         const distKm = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         setRouteStats({ distance: `${distKm.toFixed(1)} км`, duration: `${Math.round(distKm * 15)} мин` });
 
-        // Draw optimal route polyline on the map
+        // Draw a simple route polyline using 2GIS MapGL Polyline
         try {
-          activeRouteRef.current.clear();
-          activeRouteRef.current.carRoute({
-            points: [
-              [fromLng, fromLat],
-              [toLng, toLat]
-            ]
-          });
-        } catch (routeErr) {
-          console.warn("[Map] 2GIS routing failed:", routeErr);
+          const mapgl = (window as any).mapgl;
+          if (mapgl && mapInstance) {
+            if (activeRouteRef.current) {
+              try { activeRouteRef.current.clear(); } catch {}
+            }
+            routePolyline = new mapgl.Polyline(mapInstance, {
+              coordinates: [
+                [fromLng, fromLat],
+                [toLng, toLat]
+              ],
+              color: "#3b82f6",
+              width: 4,
+              opacity: 0.8,
+              dashLength: 0,
+            });
+            activeRouteRef.current = routePolyline;
+          }
+        } catch (e) {
+          console.warn("[Map] Polyline draw failed:", e);
         }
       }
     } else {
       setRouteStats(null);
-      if (activeRouteRef.current) {
-        try {
-          activeRouteRef.current.clear();
-        } catch {}
-      }
     }
+
+    return () => {
+      if (routePolyline) {
+        try { routePolyline.destroy(); } catch {}
+        activeRouteRef.current = null;
+      }
+    };
   }, [isRoutingActive, activeMarkerId, mapInstance]);
 
   // Locate User action
