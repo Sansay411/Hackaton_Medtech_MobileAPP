@@ -797,7 +797,7 @@ async function startServer() {
     // EXACT city match — find the canonical city name in DB
     const dbCities = await db.collection("rawTariffs").distinct("city");
     const canonicalCity = dbCities.find((c: string) => c.toLowerCase() === city.toLowerCase()) || city;
-    const cityFilter = { city: canonicalCity };
+    const cityFilter = { city: canonicalCity, priceKzt: { $gte: 100 } };
 
     const PROJECTION = {
       clinicId: 1, clinicName: 1, city: 1, address: 1, phone: 1,
@@ -849,7 +849,7 @@ async function startServer() {
         { clinicName: { $regex: w, $options: "i" } },
       ]);
       items = await db.collection("rawTariffs")
-        .find({ $or: crossClauses }).project(PROJECTION).limit(100).toArray();
+        .find({ priceKzt: { $gte: 100 }, $or: crossClauses }).project(PROJECTION).limit(100).toArray();
       fromOtherCities = items.length > 0;
     }
 
@@ -862,6 +862,7 @@ async function startServer() {
           if (Array.isArray(rawJson)) {
             items = rawJson.filter((item: any) => {
               if (item.city && item.city.toLowerCase() !== city.toLowerCase()) return false;
+              if (typeof item.priceKzt !== "number" || item.priceKzt < 100) return false;
               if (finalSearchWords.length === 0) return true;
               return finalSearchWords.some((w: string) =>
                 (item.serviceNameRaw || "").toLowerCase().includes(w) ||

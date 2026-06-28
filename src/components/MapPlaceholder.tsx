@@ -253,12 +253,15 @@ export default function MapPlaceholder({
         markerLng = currentCenter.lng + offsetLng;
       }
 
+      const logo = (marker.logoUrl && !marker.logoUrl.includes("unsplash.com")) 
+        ? marker.logoUrl 
+        : getClinicLogoUrl(marker.name);
+
       const htmlContent = `
         <div onclick="window.onMapMarkerClick('${marker.id}')" style="width: 186px; height: 56px; pointer-events: auto;" class="relative flex flex-col items-center select-none cursor-pointer">
           <div class="flex items-center gap-2 bg-white rounded-2xl p-2 shadow-lg border ${isActive ? "border-blue-600 ring-2 ring-blue-100" : "border-slate-200"} hover:border-blue-600 transition-all duration-300 w-full h-full text-left">
-            <div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
-              <img src="${marker.logoUrl || getClinicLogoUrl(marker.name)}" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
-              <div style="display:none;width:100%;height:100%;background:linear-gradient(135deg,#6366f1,#8b5cf6);align-items:center;justify-content:center;border-radius:12px" class="text-white font-black text-xs">${getBrandLogoText(marker.name)}</div>
+            <div class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 overflow-hidden bg-slate-50">
+              <img src="${logo}" style="width: 100%; height: 100%; object-fit: contain;" />
             </div>
             <div class="flex-1 min-w-0 leading-tight">
               <div class="text-[8px] font-black text-slate-400 truncate uppercase tracking-tight">${simplifiedName}</div>
@@ -447,14 +450,7 @@ export default function MapPlaceholder({
       {!isRoutingActive && activeMarker && (
         <div className="absolute bottom-20 left-4 right-4 sm:right-auto sm:max-w-sm bg-white/95 backdrop-blur-md border border-slate-200/80 text-slate-800 rounded-3xl p-4 shadow-xl animate-fade-in z-10">
           <div className="flex items-start gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center shadow-xs shrink-0 overflow-hidden">
-              <img
-                src={activeMarker.logoUrl || getClinicLogoUrl(activeMarker.name)}
-                style={{ width: "100%", height: "100%", objectFit: "contain", padding: "4px" }}
-                onError={(e) => { e.currentTarget.style.display = "none"; }}
-              />
-              {(!activeMarker.logoUrl && !getClinicLogoUrl(activeMarker.name).startsWith("http")) ? null : null}
-            </div>
+            {renderBrandLogo(activeMarker.name, "w-12 h-12 rounded-2xl")}
             <div className="flex-1 min-w-0 relative">
               <button
                 onClick={() => onMarkerSelect(undefined as any)}

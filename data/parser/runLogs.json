@@ -238,5 +238,41 @@
     "recordsUnmatched": 0,
     "errorCount": 0,
     "isSuccessful": true
+  },
+  {
+    "sourceId": "kdl-olymp-almaty",
+    "startedAt": "2026-06-28T12:03:02.304Z",
+    "completedAt": "2026-06-28T12:03:06.163Z",
+    "durationMs": 3859,
+    "recordsExtracted": 100,
+    "recordsNew": 0,
+    "recordsNormalized": 0,
+    "recordsUnmatched": 0,
+    "errorCount": 0,
+    "isSuccessful": true
+  },
+  {
+    "sourceId": "kdl-olymp-astana",
+    "startedAt": "2026-06-28T12:03:06.167Z",
+    "completedAt": "2026-06-28T12:03:09.088Z",
+    "durationMs": 2921,
+    "recordsExtracted": 100,
+    "recordsNew": 0,
+    "recordsNormalized": 0,
+    "recordsUnmatched": 0,
+    "errorCount": 0,
+    "isSuccessful": true
+  },
+  {
+    "sourceId": "kdl-olymp-shymkent",
+    "startedAt": "2026-06-28T12:03:09.089Z",
+    "completedAt": "2026-06-28T12:03:11.675Z",
+    "durationMs": 2586,
+    "recordsExtracted": 100,
+    "recordsNew": 0,
+    "recordsNormalized": 0,
+    "recordsUnmatched": 0,
+    "errorCount": 0,
+    "isSuccessful": true
   }
 ]

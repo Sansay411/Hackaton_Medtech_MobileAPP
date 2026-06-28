@@ -815,7 +815,10 @@ export default function App() {
         };
         const cityCenter = getCityFallbackCoords(searchCity);
 
-        const resolvedMarkers: MapMarker[] = clinicsList.map((c, i) => {
+        const sortedDbClinics = [...clinicsList].sort((a, b) => a.price - b.price);
+        const top5DbClinics = sortedDbClinics.slice(0, 5);
+
+        const resolvedMarkers: MapMarker[] = top5DbClinics.map((c, i) => {
           const fullClinic = dbClinicsMap[c.id];
           const latFallback = cityCenter.lat + (i - 2) * 0.007;
           const lngFallback = cityCenter.lng + (i - 2) * 0.009 * (Math.sin(i) || 1);
@@ -859,9 +862,12 @@ export default function App() {
     setClinics(enrichedClinics);
     setIsSimulatedMode(servicesData.isSimulated || false);
 
-    // Construct consolidated markers (one per unique clinic brand to avoid crowding the map)
+    // Construct consolidated markers (only top 5 cheapest/best clinics to avoid crowding the map)
+    const sortedLiveClinics = [...fetchedClinics].sort((a, b) => a.price - b.price);
+    const top5LiveClinics = sortedLiveClinics.slice(0, 5);
+
     const groupedMarkersMap = new Map<string, any>();
-    fetchedClinics.forEach((c: any) => {
+    top5LiveClinics.forEach((c: any) => {
       const normName = c.name;
       if (!groupedMarkersMap.has(normName) || c.price < groupedMarkersMap.get(normName).price) {
         groupedMarkersMap.set(normName, {
