@@ -49,7 +49,7 @@ import {
   Brain,
   Smile
 } from "lucide-react";
-import { onAuthStateChanged, auth, signOut, db, collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, setDoc, handleMongoDBError, OperationType, deleteDoc, writeBatch } from "./lib/firebase";
+import { onAuthStateChanged, auth, signOut, db, collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, setDoc, handleMongoDBError, OperationType, deleteDoc, writeBatch } from "./lib/dbBridge";
 import { Clinic, MapMarker, OnboardingState } from "./types";
 import Logo from "./components/Logo";
 import Onboarding from "./components/Onboarding";
