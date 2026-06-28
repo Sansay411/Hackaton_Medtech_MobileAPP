@@ -301,60 +301,116 @@ export default function MapPlaceholder({
   const routePropsRef = useRef({ markers, activeMarkerId, userLocation, currentCenter });
   useEffect(() => { routePropsRef.current = { markers, activeMarkerId, userLocation, currentCenter }; });
 
-  // When "Маршрут" clicked: calculate distance and draw route polyline
+  // When "Маршрут" clicked: get real road route via 2GIS HTTP API + draw polyline
   useEffect(() => {
-    let routePolyline: any = null;
-
     if (isRoutingActive && activeMarkerId && mapInstance) {
       const { markers, userLocation, currentCenter } = routePropsRef.current;
       const marker = markers.find(m => m.id === activeMarkerId);
-      if (marker) {
-        const fromLat = userLocation?.lat || currentCenter.lat;
-        const fromLng = userLocation?.lng || currentCenter.lng;
-        const toLat = marker.lat || currentCenter.lat;
-        const toLng = marker.lng || currentCenter.lng;
+      if (!marker) return;
 
-        // Calculate geodesic distance
-        const R = 6371;
-        const dLat = (toLat - fromLat) * Math.PI / 180;
-        const dLon = (toLng - fromLng) * Math.PI / 180;
-        const a = Math.sin(dLat/2)**2 + Math.cos(fromLat*Math.PI/180) * Math.cos(toLat*Math.PI/180) * Math.sin(dLon/2)**2;
-        const distKm = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        setRouteStats({ distance: `${distKm.toFixed(1)} км`, duration: `${Math.round(distKm * 15)} мин` });
+      const fromLat = userLocation?.lat || currentCenter.lat;
+      const fromLng = userLocation?.lng || currentCenter.lng;
+      const toLat = marker.lat || currentCenter.lat;
+      const toLng = marker.lng || currentCenter.lng;
 
-        // Draw a simple route polyline using 2GIS MapGL Polyline
+      let routePolyline: any = null;
+      let destroyed = false;
+
+      // Try 2GIS Routing API for real road route
+      const fetchRoute = async () => {
         try {
-          const mapgl = (window as any).mapgl;
-          if (mapgl && mapInstance) {
-            if (activeRouteRef.current) {
-              try { activeRouteRef.current.clear(); } catch {}
+          const dgKey = "26c65059-f062-4a91-a973-b8a38fedf562";
+          const resp = await fetch(
+            `https://routing.api.2gis.com/carrouting/6.0.0/global?key=${dgKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                points: [
+                  { lat: fromLat, lon: fromLng },
+                  { lat: toLat, lon: toLng },
+                ],
+                type: "car",
+                locale: "ru_RU",
+              }),
             }
+          );
+
+          if (!resp.ok && resp.status === 429) throw new Error("rate_limit");
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+          const data = await resp.json();
+          // 2GIS routes response: data.result[0].geometry → array of [lat, lng]
+          const route = data?.result?.[0];
+          if (route?.geometry?.length > 2) {
+            // Convert geometry from [lat,lng] to [lng,lat] for 2GIS MapGL
+            const coords = route.geometry.map((pt: number[]) => [pt[1], pt[0]]);
+            const totalKm = (route.total_distance || route.distance || 0) / 1000;
+            const totalMin = Math.round((route.total_duration || route.duration || 0) / 60);
+
+            if (!destroyed) {
+              setRouteStats({
+                distance: `${totalKm.toFixed(1)} км`,
+                duration: `${totalMin} мин`,
+              });
+              const mapgl = (window as any).mapgl;
+              if (mapgl) {
+                if (activeRouteRef.current) { try { (activeRouteRef.current as any).destroy(); } catch {} }
+                routePolyline = new mapgl.Polyline(mapInstance, {
+                  coordinates: coords,
+                  color: "#3b82f6",
+                  width: 5,
+                  opacity: 0.85,
+                  dashLength: 0,
+                  arrow: true,
+                });
+                activeRouteRef.current = routePolyline;
+              }
+            }
+            return;
+          }
+        } catch (e: any) {
+          if (e.message === "rate_limit") console.warn("[Map] 2GIS routing rate limit, using geodesic fallback");
+          else console.warn("[Map] 2GIS routing failed:", e.message);
+        }
+
+        // Fallback: geodesic straight line
+        if (!destroyed) {
+          const R = 6371;
+          const dLat = (toLat - fromLat) * Math.PI / 180;
+          const dLon = (toLng - fromLng) * Math.PI / 180;
+          const a = Math.sin(dLat/2)**2 + Math.cos(fromLat*Math.PI/180) * Math.cos(toLat*Math.PI/180) * Math.sin(dLon/2)**2;
+          const distKm = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          setRouteStats({ distance: `${distKm.toFixed(1)} км`, duration: `${Math.round(distKm * 15)} мин` });
+
+          const mapgl = (window as any).mapgl;
+          if (mapgl) {
+            if (activeRouteRef.current) { try { (activeRouteRef.current as any).destroy(); } catch {} }
             routePolyline = new mapgl.Polyline(mapInstance, {
-              coordinates: [
-                [fromLng, fromLat],
-                [toLng, toLat]
-              ],
+              coordinates: [[fromLng, fromLat], [toLng, toLat]],
               color: "#3b82f6",
               width: 4,
               opacity: 0.8,
-              dashLength: 0,
+              dashLength: 6,
             });
             activeRouteRef.current = routePolyline;
           }
-        } catch (e) {
-          console.warn("[Map] Polyline draw failed:", e);
         }
-      }
+      };
+
+      fetchRoute();
+
+      return () => {
+        destroyed = true;
+        if (routePolyline) { try { (routePolyline as any).destroy(); } catch {} }
+        activeRouteRef.current = null;
+        setRouteStats(null);
+      };
     } else {
       setRouteStats(null);
+      if (activeRouteRef.current) { try { (activeRouteRef.current as any).destroy(); } catch {} }
+      activeRouteRef.current = null;
     }
-
-    return () => {
-      if (routePolyline) {
-        try { routePolyline.destroy(); } catch {}
-        activeRouteRef.current = null;
-      }
-    };
   }, [isRoutingActive, activeMarkerId, mapInstance]);
 
   // Locate User action
