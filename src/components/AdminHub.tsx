@@ -7,7 +7,7 @@ import {
   Play as PlayIcon, Loader2, Folder, File, Layers, Settings, BookOpen, AlertCircle, Upload
 } from "lucide-react";
 import { SERVICES_CATALOG, NormalizedService } from "../data/servicesCatalog";
-import { db, collection, getDocs, setDoc, doc, addDoc, deleteDoc, onSnapshot, writeBatch } from "../lib/firebase";
+import { db, collection, getDocs, setDoc, doc, addDoc, deleteDoc, writeBatch } from "../lib/firebase";
 import { BlogPost } from "../types";
 import Logo from "./Logo";
 import SourcesManager from "./SourcesManager";
