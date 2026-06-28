@@ -886,6 +886,73 @@ async function startServer() {
     return name.trim();
   }
 
+  // Real-time cached 2GIS Geocoder
+  async function geocodeAddress(clinicName: string, address: string, city: string, db: any) {
+    const cleanAddress = address || "";
+    const cacheKey = `${clinicName}_${cleanAddress}_${city}`.toLowerCase().trim().replace(/[^a-zа-яё0-9]/g, "_");
+    
+    try {
+      // 1. Check cache in MongoDB
+      const cached = await db.collection("geocodingCache").findOne({ id: cacheKey });
+      if (cached && typeof cached.lat === "number" && typeof cached.lng === "number") {
+        return { lat: cached.lat, lng: cached.lng };
+      }
+      
+      // 2. Query 2GIS Catalog API
+      const axios = (await import("axios")).default;
+      const cityCenters: Record<string, string> = {
+        "алматы": "76.889,43.238", "астана": "71.449,51.169",
+        "шымкент": "69.590,42.341", "караганда": "73.088,49.802"
+      };
+      const location = cityCenters[city.toLowerCase().trim()] || "76.889,43.238";
+      
+      const queryText = `${clinicName} ${cleanAddress}`.trim();
+      console.log(`[Geocoder] Geocoding: "${queryText}" in ${city}`);
+      
+      const response = await axios.get("https://catalog.api.2gis.com/3.0/items", {
+        params: {
+          q: queryText,
+          location,
+          key: "26c65059-f062-4a91-a973-b8a38fedf562",
+          limit: 1,
+          fields: "items.point"
+        },
+        timeout: 4000
+      });
+      
+      const item = response.data?.result?.items?.[0];
+      if (item?.point) {
+        const lat = item.point.lat;
+        const lng = item.point.lon; // 2GIS returns lon for longitude
+        
+        // Save to cache
+        await db.collection("geocodingCache").updateOne(
+          { id: cacheKey },
+          { $set: { id: cacheKey, clinicName, address: cleanAddress, city, lat, lng, resolvedAt: new Date().toISOString() } },
+          { upsert: true }
+        );
+        return { lat, lng };
+      }
+    } catch (err: any) {
+      console.warn(`[Geocoder] Failed for "${clinicName} - ${cleanAddress}":`, err.message);
+    }
+    
+    // 3. Fallback: Deterministic offset based on address string hash to prevent map jumping
+    const cityCenter = CITY_CENTERS[city.toLowerCase().trim()] || CITY_CENTERS["алматы"];
+    let hash = 0;
+    const str = clinicName + cleanAddress;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const offsetLat = ((hash & 0xFF) / 255 - 0.5) * 0.015;
+    const offsetLng = (((hash >> 8) & 0xFF) / 255 - 0.5) * 0.015;
+    
+    return {
+      lat: cityCenter.lat + offsetLat,
+      lng: cityCenter.lng + offsetLng
+    };
+  }
+
   // API Route: AI-powered medical services search
   app.post("/api/search-services", async (req, res) => {
     try {
@@ -954,19 +1021,47 @@ async function startServer() {
           }
         }
 
+        // Call geocoding helper to resolve coordinates dynamically
+        const coords = await geocodeAddress(clinicName, bestItem.address, city, db);
+        const clinicId = bestItem.clinicId || `clinic-${idx}-${clinicName.toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")}`;
+        
+        // Write/sync coordinates and details to MongoDB clinics collection for B2C database mode
+        try {
+          await db.collection("clinics").updateOne(
+            { id: clinicId },
+            {
+              $set: {
+                id: clinicId,
+                name: clinicName,
+                address: bestItem.address || "Адрес не указан",
+                phone: bestItem.phone || "Телефон не указан",
+                city,
+                lat: coords.lat,
+                lng: coords.lng,
+                logoUrl,
+                osms,
+                updatedAt: new Date().toISOString()
+              }
+            },
+            { upsert: true }
+          );
+        } catch (syncErr: any) {
+          console.warn("[Geocoder] Syncing coordinates to clinics failed:", syncErr.message);
+        }
+
         clinicsList.push({
-          id: bestItem.clinicId || `clinic-${idx}-${clinicName.toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")}`,
+          id: clinicId,
           name: clinicName,
           price: minPrice,
           address: bestItem.address || "Адрес не указан",
           district: "",
-          distance: getDistanceStr(bestItem.lat, bestItem.lng, city),
+          distance: getDistanceStr(coords.lat, coords.lng, city),
           osms,
           updated: getUpdatedStr(bestItem.parsedAt),
           phone: bestItem.phone || "Телефон не указан",
           rating: 4.5,
-          lat: (bestItem.lat && Math.abs(bestItem.lat - cityCenter.lat) < 1.5) ? bestItem.lat : cityCenter.lat + (Math.random() - 0.5) * 0.02,
-          lng: (bestItem.lng && Math.abs(bestItem.lng - cityCenter.lng) < 1.5) ? bestItem.lng : cityCenter.lng + (Math.random() - 0.5) * 0.02,
+          lat: coords.lat,
+          lng: coords.lng,
           logoUrl,
           services: items.map(it => ({
             serviceNameRaw: it.serviceNameRaw,

@@ -200,7 +200,17 @@ export default function MapPlaceholder({
 
     setMapInstance(map);
 
+    if (mapgl.Directions) {
+      activeRouteRef.current = new mapgl.Directions(map, {
+        directionsApiKey: "26c65059-f062-4a91-a973-b8a38fedf562",
+      });
+    }
+
     return () => {
+      if (activeRouteRef.current) {
+        try { activeRouteRef.current.clear(); } catch {}
+        activeRouteRef.current = null;
+      }
       map.destroy();
       setMapInstance(null);
     };
@@ -228,9 +238,20 @@ export default function MapPlaceholder({
             .trim()
         : "Клиника";
 
-      // Use real coordinates, or fall back to city center with slight spread
-      const markerLat = marker.lat || currentCenter.lat + (Math.random() - 0.5) * 0.03;
-      const markerLng = marker.lng || currentCenter.lng + (Math.random() - 0.5) * 0.03;
+      // Use real coordinates, or fall back to city center with a deterministic name-based spread
+      let markerLat = marker.lat;
+      let markerLng = marker.lng;
+      if (!markerLat || !markerLng) {
+        let hash = 0;
+        const str = marker.name || "";
+        for (let i = 0; i < str.length; i++) {
+          hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const offsetLat = ((hash & 0xFF) / 255 - 0.5) * 0.025;
+        const offsetLng = (((hash >> 8) & 0xFF) / 255 - 0.5) * 0.025;
+        markerLat = currentCenter.lat + offsetLat;
+        markerLng = currentCenter.lng + offsetLng;
+      }
 
       const htmlContent = `
         <div onclick="window.onMapMarkerClick('${marker.id}')" style="width: 186px; height: 56px; pointer-events: auto;" class="relative flex flex-col items-center select-none cursor-pointer">
@@ -277,27 +298,45 @@ export default function MapPlaceholder({
   const routePropsRef = useRef({ markers, activeMarkerId, userLocation, currentCenter });
   useEffect(() => { routePropsRef.current = { markers, activeMarkerId, userLocation, currentCenter }; });
 
-  // When "Маршрут" clicked: calculate distance IMMEDIATELY
+  // When "Маршрут" clicked: calculate distance and draw route polyline
   useEffect(() => {
-    if (isRoutingActive && activeMarkerId) {
+    if (isRoutingActive && activeMarkerId && mapInstance && activeRouteRef.current) {
       const { markers, userLocation, currentCenter } = routePropsRef.current;
       const marker = markers.find(m => m.id === activeMarkerId);
       if (marker) {
         const fromLat = userLocation?.lat || currentCenter.lat;
         const fromLng = userLocation?.lng || currentCenter.lng;
-        const toLat = marker.lat || currentCenter.lat;
-        const toLng = marker.lng || currentCenter.lng;
+        const toLat = marker.lat;
+        const toLng = marker.lng;
         const R = 6371;
         const dLat = (toLat - fromLat) * Math.PI / 180;
         const dLon = (toLng - fromLng) * Math.PI / 180;
         const a = Math.sin(dLat/2)**2 + Math.cos(fromLat*Math.PI/180) * Math.cos(toLat*Math.PI/180) * Math.sin(dLon/2)**2;
         const distKm = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         setRouteStats({ distance: `${distKm.toFixed(1)} км`, duration: `${Math.round(distKm * 15)} мин` });
+
+        // Draw optimal route polyline on the map
+        try {
+          activeRouteRef.current.clear();
+          activeRouteRef.current.carRoute({
+            points: [
+              [fromLng, fromLat],
+              [toLng, toLat]
+            ]
+          });
+        } catch (routeErr) {
+          console.warn("[Map] 2GIS routing failed:", routeErr);
+        }
       }
     } else {
       setRouteStats(null);
+      if (activeRouteRef.current) {
+        try {
+          activeRouteRef.current.clear();
+        } catch {}
+      }
     }
-  }, [isRoutingActive, activeMarkerId]);
+  }, [isRoutingActive, activeMarkerId, mapInstance]);
 
   // Locate User action
   const locateUser = () => {
