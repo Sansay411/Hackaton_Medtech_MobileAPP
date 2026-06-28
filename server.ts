@@ -752,7 +752,7 @@ async function startServer() {
     "холестерин": ["липидный профиль", "липиды", "hdl", "ldl"],
     "витамин": ["25-oh", "кальциферол"],
     "онкомаркер": ["ca-125", "ca-19", "ca-15", "раковый", "опухолевый"],
-    "кровь": ["гематология"],
+    "кровь": ["гематология", "крови", "кровью"],
     "моча": ["оам", "общий анализ мочи"],
   };
 
@@ -816,7 +816,7 @@ async function startServer() {
         { address: { $regex: w, $options: "i" } },
       ]);
       items = await db.collection("rawTariffs")
-        .find({ ...cityFilter, $or: orClauses }).project(PROJECTION).limit(150).toArray();
+        .find({ ...cityFilter, $or: orClauses }).project(PROJECTION).limit(500).toArray();
 
       // Strategy 2: prefix matching, same city
       if (items.length < 8 && finalSearchWords.some(w => w.length > 4)) {
@@ -829,7 +829,7 @@ async function startServer() {
           ];
         });
         const more = await db.collection("rawTariffs")
-          .find({ ...cityFilter, $or: prefixClauses }).project(PROJECTION).limit(100).toArray();
+          .find({ ...cityFilter, $or: prefixClauses }).project(PROJECTION).limit(500).toArray();
         const seenIds = new Set(items.map((r: any) => r._id?.toString()));
         for (const item of more) {
           if (!seenIds.has(item._id?.toString())) { items.push(item); seenIds.add(item._id?.toString()); }
@@ -837,7 +837,7 @@ async function startServer() {
       }
     } else {
       items = await db.collection("rawTariffs")
-        .find(cityFilter).project(PROJECTION).limit(100).toArray();
+        .find(cityFilter).project(PROJECTION).limit(500).toArray();
     }
 
     // Strategy 3: cross-city only if allowed (search only, NOT map)
@@ -849,7 +849,7 @@ async function startServer() {
         { clinicName: { $regex: w, $options: "i" } },
       ]);
       items = await db.collection("rawTariffs")
-        .find({ $or: crossClauses }).project(PROJECTION).limit(50).toArray();
+        .find({ $or: crossClauses }).project(PROJECTION).limit(100).toArray();
       fromOtherCities = items.length > 0;
     }
 
@@ -1135,7 +1135,7 @@ async function startServer() {
       try {
         const { getDb } = await import("./src/lib/mongodb");
         const db = await getDb();
-        const records = await db.collection("rawTariffs").find().sort({ parsedAt: -1 }).limit(50).toArray();
+        const records = await db.collection("rawTariffs").find().sort({ parsedAt: -1 }).limit(100).toArray();
         records.forEach((r: any) => {
           items.push({
             id: r.id || r._id?.toString(),

@@ -1146,6 +1146,22 @@ export default function App() {
     return 0;
   });
 
+  const hasActiveOverlay = !!(
+    selectedClinic ||
+    selectedDoctor ||
+    showMatrix ||
+    showBookingSheet ||
+    showSettingsSheet ||
+    showAlertsSheet ||
+    showFamilySheet ||
+    showRecordsSheet ||
+    showLabSheet ||
+    showOSMSBalanceSheet ||
+    showQuizSheet ||
+    showEventsSheet ||
+    showCityModal
+  );
+
   return (
     <div className="client-app h-screen h-[100dvh] bg-slate-50 flex flex-col relative overflow-hidden w-full max-w-md mx-auto shadow-xl border-x border-slate-200">
       
@@ -2673,7 +2689,7 @@ export default function App() {
           {/* SLIDE-UP DETAILED SHEET (Screen 6 / 7 details simulator) */}
           {/* ======================================================== */}
           {selectedClinic && (
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex flex-col justify-end">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex flex-col justify-end max-w-md mx-auto w-full">
               {/* Tap backdrop to close */}
               <div className="flex-1" onClick={() => setSelectedClinic(null)} />
               
