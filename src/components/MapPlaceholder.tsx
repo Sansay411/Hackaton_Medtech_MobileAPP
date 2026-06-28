@@ -293,53 +293,45 @@ export default function MapPlaceholder({
           : [currentCenter.lng, currentCenter.lat]; // [longitude, latitude]
         const end = [activeMarker.lng, activeMarker.lat]; // [longitude, latitude]
 
-        if (!(window as any).mapgl?.Directions) {
-          console.warn("[Map] Directions API not available");
-          setRouteStats(null);
-          return;
-        }
-
-        const directions = new mapgl.Directions(mapInstance, {
-          directionsApiKey: "26c65059-f062-4a91-a973-b8a38fedf562"
-        });
-
-        const routeTimeout = setTimeout(() => {
-          console.warn("[Map] Route building timeout — using straight-line distance");
+        // Calculate route — try 2GIS API, fallback to geodesic calculation
+        const calcGeoRoute = () => {
           const R = 6371;
-          const dLat = (end[1] - start[0]) * Math.PI / 180;
-          const dLon = (end[0] - start[1]) * Math.PI / 180;
-          const dist = Math.sqrt(dLat*dLat + dLon*dLon) * R;
+          const toRad = (d: number) => d * Math.PI / 180;
+          const dLat = toRad(end[1] - start[0]);
+          const dLon = toRad(end[0] - start[1]);
+          const a = Math.sin(dLat/2)**2 + Math.cos(toRad(start[0]))*Math.cos(toRad(end[1]))*Math.sin(dLon/2)**2;
+          const dist = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
           setRouteStats({ distance: `${dist.toFixed(1)} км`, duration: `${Math.round(dist * 12)} мин` });
-        }, 8000);
+        };
 
-        directions.on("routingSuccess", (data: any) => {
-          clearTimeout(routeTimeout);
-          const route = data.routes[0];
-          if (route) {
-            const lengthMeters = route.distance || route.length || 0;
-            const durationSeconds = route.duration || 0;
-            setRouteStats({
-              distance: `${(lengthMeters / 1000).toFixed(1)} км`,
-              duration: `${Math.round(durationSeconds / 60)} мин`
+        if ((window as any).mapgl?.Directions) {
+          try {
+            const directions = new mapgl.Directions(mapInstance, {
+              directionsApiKey: "26c65059-f062-4a91-a973-b8a38fedf562"
             });
-          }
-        });
 
-        directions.on("routingError", (err: any) => {
-          clearTimeout(routeTimeout);
-          console.error("2GIS Route build error:", err);
-          setRouteStats(null);
-        });
+            const timer = setTimeout(() => { calcGeoRoute(); try { directions.clear(); } catch {} }, 5000);
 
-        try {
-          directions.carRoute({
-            points: [start, end]
-          });
-          activeRouteRef.current = directions;
-        } catch (e: any) {
-          clearTimeout(routeTimeout);
-          console.warn("[Map] Route build exception:", e);
-          setRouteStats(null);
+            directions.on("routingSuccess", (data: any) => {
+              clearTimeout(timer);
+              const route = data.routes?.[0];
+              if (route) {
+                const meters = route.distance || route.length || 0;
+                const secs = route.duration || 0;
+                if (meters > 0) {
+                  setRouteStats({ distance: `${(meters/1000).toFixed(1)} км`, duration: `${Math.round(secs/60)} мин` });
+                  return;
+                }
+              }
+              calcGeoRoute();
+            });
+
+            directions.on("routingError", () => { clearTimeout(timer); calcGeoRoute(); });
+            directions.carRoute({ points: [start, end] });
+            activeRouteRef.current = directions;
+          } catch { calcGeoRoute(); }
+        } else {
+          calcGeoRoute();
         }
       }
     } else {
