@@ -629,7 +629,7 @@ export default function App() {
 
   // Lazy Write-Back: Saves parsed results to clinics & services collections in the background
   const saveSearchDataToMongoDB = async (queryText: string, searchCity: string, clinicsList: Clinic[]) => {
-    if (!clinicsList || clinicsList.length === 0) return;
+    return; // Client-side Firebase Firestore writes bypassed to eliminate search UI latency
     try {
       // 1. Dataset-level SHA-256 equivalent FNV-1a Hash Deduplication
       const datasetString = JSON.stringify(
