@@ -77,23 +77,27 @@ export class InvitroProvider extends BaseMedicalProvider {
 
       const items = $(".analyzes-item").toArray().slice(0, 500);
       for (const item of items) {
-        const name = $(item).find(".analyzes-item__title").text().trim();
-        const priceText = $(item).find(".analyzes-item__total--price, .analyzes-item__total--sum").first().text().trim();
-        const price = parsePrice(priceText);
-        if (!name || price <= 0) continue;
+        try {
+          const name = $(item).find(".analyzes-item__title").text().trim();
+          const priceText = $(item).find(".analyzes-item__total--price, .analyzes-item__total--sum").first().text().trim();
+          const price = parsePrice(priceText);
+          if (!name || price <= 0) continue;
 
-        // Create a tariff entry for EACH branch (with real coordinates)
-        for (const branch of branches) {
-          tariffs.push({
-            clinicName: "Инвитро (Invitro)",
-            rawServiceName: name,
-            priceKzt: price,
-            osmsEligible: false,
-            phone: branch.phone,
-            address: branch.address,
-            lat: branch.lat,
-            lng: branch.lng,
-          });
+          // Create a tariff entry for EACH branch (with real coordinates)
+          for (const branch of branches) {
+            tariffs.push({
+              clinicName: "Инвитро (Invitro)",
+              rawServiceName: name,
+              priceKzt: price,
+              osmsEligible: false,
+              phone: branch.phone,
+              address: branch.address,
+              lat: branch.lat,
+              lng: branch.lng,
+            });
+          }
+        } catch (innerErr: any) {
+          console.warn("[InvitroProvider] Broken analyzes-item layout or empty cell:", innerErr.message);
         }
       }
 

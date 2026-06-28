@@ -49,7 +49,7 @@ import {
   Brain,
   Smile
 } from "lucide-react";
-import { onAuthStateChanged, auth, signOut, db, collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, setDoc, handleMongoDBError, OperationType, deleteDoc } from "./lib/dbBridge";
+import { onAuthStateChanged, auth, signOut, db, collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, setDoc, handleMongoDBError, OperationType, deleteDoc, writeBatch } from "./lib/dbBridge";
 import { Clinic, MapMarker, OnboardingState } from "./types";
 import Logo from "./components/Logo";
 import Onboarding from "./components/Onboarding";
@@ -631,11 +631,37 @@ export default function App() {
   const saveSearchDataToMongoDB = async (queryText: string, searchCity: string, clinicsList: Clinic[]) => {
     if (!clinicsList || clinicsList.length === 0) return;
     try {
+      // 1. Dataset-level SHA-256 equivalent FNV-1a Hash Deduplication
+      const datasetString = JSON.stringify(
+        clinicsList.map(c => ({
+          id: c.id,
+          name: c.name,
+          price: c.price,
+        })).sort((a, b) => a.id.localeCompare(b.id))
+      );
+
+      // Compute simple, robust fast FNV-1a hash of the dataset
+      let hash = 2166136261;
+      for (let i = 0; i < datasetString.length; i++) {
+        hash ^= datasetString.charCodeAt(i);
+        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+      }
+      const currentHash = (hash >>> 0).toString(16);
+      const cacheKey = `medtariff_hash_${queryText.toLowerCase()}_${searchCity.toLowerCase()}`;
+      const previousHash = localStorage.getItem(cacheKey);
+
+      if (previousHash === currentHash) {
+        console.log(`Lazy Write-Back: Data for "${queryText}" in ${searchCity} has not changed. Skipping database write.`);
+        return;
+      }
+
       console.log("Lazy Write-Back: Starting background verification and synchronization with MongoDB for:", queryText);
       const prices = clinicsList.map(c => c.price);
       const minPrice = Math.min(...prices);
       const averagePrice = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
       
+      const batch = writeBatch(db);
+
       for (const clinic of clinicsList) {
         const clinicRef = doc(db, "clinics", clinic.id);
         let logoUrl = "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80";
@@ -664,7 +690,7 @@ export default function App() {
           osms: clinic.osms || false,
           updatedAt: new Date().toISOString()
         };
-        await setDoc(clinicRef, clinicDocData, { merge: true });
+        batch.set(clinicRef, clinicDocData, { merge: true });
       }
 
       const serviceId = `service-${queryText.toLowerCase().replace(/[^a-zа-я0-9]+/g, "-")}-${searchCity.toLowerCase().replace(/[^a-zа-я0-9]+/g, "-")}`;
@@ -707,7 +733,10 @@ export default function App() {
         })),
         updatedAt: new Date().toISOString()
       };
-      await setDoc(serviceRef, serviceDocData, { merge: true });
+      batch.set(serviceRef, serviceDocData, { merge: true });
+      await batch.commit();
+
+      localStorage.setItem(cacheKey, currentHash);
       console.log("Lazy Write-Back: Successfully aggregated, validated and synchronized data to MongoDB for:", queryText);
     } catch (err) {
       console.warn("Lazy Write-Back background synchronization warning (graceful):", err);
@@ -830,14 +859,26 @@ export default function App() {
     setClinics(enrichedClinics);
     setIsSimulatedMode(servicesData.isSimulated || false);
 
-    // 2. Fetch maps coordinates
-    const resMap = await fetch("/api/map-grounding", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: queryText, city: searchCity }),
+    // Construct consolidated markers (one per unique clinic brand to avoid crowding the map)
+    const groupedMarkersMap = new Map<string, any>();
+    fetchedClinics.forEach((c: any) => {
+      const normName = c.name;
+      if (!groupedMarkersMap.has(normName) || c.price < groupedMarkersMap.get(normName).price) {
+        groupedMarkersMap.set(normName, {
+          id: c.id,
+          name: c.name,
+          price: c.price,
+          lat: c.lat,
+          lng: c.lng,
+          address: c.address,
+          osms: c.osms,
+          rating: c.rating || 4.5,
+          logoUrl: c.logoUrl || "",
+        });
+      }
     });
-    const mapData = await resMap.json();
-    setMarkers(mapData.markers || []);
+    const resolvedMarkers = Array.from(groupedMarkersMap.values());
+    setMarkers(resolvedMarkers);
 
     if (fetchedClinics.length > 0) {
       setActiveMarkerId(fetchedClinics[0].id);

@@ -85,7 +85,28 @@ export class LocalDataLayer {
   }
 
   async addToUnmatchedQueue(rawRecordId: string, serviceNameRaw: string, price: number, source: string, city: string): Promise<void> {
-    // Unmatched records are already in rawTariffs without serviceId
+    try {
+      const { getDb } = await import("../lib/mongodb");
+      const db = await getDb();
+      await db.collection("unmatchedQueue").updateOne(
+        { id: rawRecordId },
+        {
+          $set: {
+            id: rawRecordId,
+            rawName: serviceNameRaw,
+            price,
+            source,
+            city,
+            category: "лаборатория",
+            isActive: true,
+            parsedAt: new Date().toISOString(),
+          },
+        },
+        { upsert: true }
+      );
+    } catch (err) {
+      console.warn("[LocalDataLayer] Failed to add unmatched record to MongoDB:", err);
+    }
   }
 
   async getRunLogs(maxCount?: number): Promise<ParserRunLog[]> {

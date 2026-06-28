@@ -24,17 +24,21 @@ export class MedelProvider extends BaseMedicalProvider {
       const $ = cheerio.load(response.data);
 
       $(".price-table tr, .service-row, .med-service, [class*=price] tr, li").each((_, el) => {
-        const serviceName = $(el).find(".name, .title, .service-name, td:first-child, strong").text().trim();
-        const priceText = $(el).find(".price, .cost, td:last-child, [class*=price]").text().trim();
-        const price = parsePrice(priceText);
-        if (serviceName && price > 0) {
-          tariffs.push({
-            clinicName: "МЕДЭЛ",
-            rawServiceName: serviceName,
-            priceKzt: price,
-            osmsEligible: false,
-            phone: "+7 (727) 390-00-90",
-          });
+        try {
+          const serviceName = $(el).find(".name, .title, .service-name, td:first-child, strong").text().trim();
+          const priceText = $(el).find(".price, .cost, td:last-child, [class*=price]").text().trim();
+          const price = parsePrice(priceText);
+          if (serviceName && price > 0) {
+            tariffs.push({
+              clinicName: "МЕДЭЛ",
+              rawServiceName: serviceName,
+              priceKzt: price,
+              osmsEligible: false,
+              phone: "+7 (727) 390-00-90",
+            });
+          }
+        } catch (innerErr: any) {
+          console.warn("[MedelProvider] Broken row layout or empty cell:", innerErr.message);
         }
       });
 

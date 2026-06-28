@@ -19,16 +19,20 @@ export class OlympProvider extends BaseMedicalProvider {
       const $ = cheerio.load(html);
 
       $(".price-list li, .service-block, .med-service, tr, [class*=service]").each((_, el) => {
-        const serviceName = $(el).find(".name, .title, .service-name, td:first-child, a").text().trim();
-        const priceText = $(el).find(".price, .cost, td:last-child, [class*=price]").text().trim();
-        const price = parsePrice(priceText);
-        if (serviceName && price > 0) {
-          tariffs.push({
-            clinicName: "Медицинский центр Олимп",
-            rawServiceName: serviceName,
-            priceKzt: price,
-            osmsEligible: false,
-          });
+        try {
+          const serviceName = $(el).find(".name, .title, .service-name, td:first-child, a").text().trim();
+          const priceText = $(el).find(".price, .cost, td:last-child, [class*=price]").text().trim();
+          const price = parsePrice(priceText);
+          if (serviceName && price > 0) {
+            tariffs.push({
+              clinicName: "Медицинский центр Олимп",
+              rawServiceName: serviceName,
+              priceKzt: price,
+              osmsEligible: false,
+            });
+          }
+        } catch (innerErr: any) {
+          console.warn("[OlympProvider] Broken row layout or empty cell:", innerErr.message);
         }
       });
 

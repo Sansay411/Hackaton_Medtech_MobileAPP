@@ -29,6 +29,8 @@ export class ParserEngine {
   private normalizer: ServiceNormalizer;
   private errorLogger: ParserErrorLogger;
 
+  private static isLocked = false;
+
   constructor() {
     this.localDataLayer = new LocalDataLayer();
     this.normalizer = new ServiceNormalizer();
@@ -86,7 +88,7 @@ export class ParserEngine {
           priceKzt: tariff.priceKzt,
           currency: "KZT",
           osmsEligible: tariff.osmsEligible,
-          parsedAt: result.parsedAt,
+          parsedAt: new Date().toISOString(), // Enforced server-side generation
           isActive: true,
           dataHash: "",
           lat: tariff.lat,
@@ -194,47 +196,56 @@ export class ParserEngine {
 
   /** Run all active sources sequentially. Errors in one don't stop others. */
   async runAllSources(): Promise<ParserRunResult[]> {
-    const results: ParserRunResult[] = [];
-    const sources = getActiveSources();
-
-    console.log(`[ParserEngine] Starting run for ${sources.length} sources...`);
-
-    for (const source of sources) {
-      try {
-        console.log(`[ParserEngine] Running source: ${source.id} (${source.name})`);
-        const result = await this.runSource(source);
-        results.push(result);
-        console.log(
-          `[ParserEngine] ${source.id}: ${result.recordsNew} new records, ` +
-            `${result.recordsNormalized} normalized, ${result.recordsUnmatched} unmatched`
-        );
-      } catch (err: any) {
-        console.error(`[ParserEngine] Fatal error in source ${source.id}:`, err.message);
-        results.push({
-          sourceId: source.id,
-          startedAt: new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-          durationMs: 0,
-          recordsExtracted: 0,
-          recordsNew: 0,
-          recordsNormalized: 0,
-          recordsUnmatched: 0,
-          errors: [
-            {
-              sourceId: source.id,
-              errorType: "unknown",
-              message: err.message,
-              timestamp: new Date().toISOString(),
-              retryCount: 0,
-            },
-          ],
-          isSuccessful: false,
-        });
-      }
+    if (ParserEngine.isLocked) {
+      console.warn("[ParserEngine] Mutex lock active. Preventing overlapping runs.");
+      throw new Error("Parser is already running. Please wait for the current run to finish.");
     }
+    ParserEngine.isLocked = true;
+    try {
+      const results: ParserRunResult[] = [];
+      const sources = getActiveSources();
 
-    console.log(`[ParserEngine] Completed. ${results.filter((r) => r.isSuccessful).length}/${sources.length} successful.`);
-    return results;
+      console.log(`[ParserEngine] Starting run for ${sources.length} sources...`);
+
+      for (const source of sources) {
+        try {
+          console.log(`[ParserEngine] Running source: ${source.id} (${source.name})`);
+          const result = await this.runSource(source);
+          results.push(result);
+          console.log(
+            `[ParserEngine] ${source.id}: ${result.recordsNew} new records, ` +
+              `${result.recordsNormalized} normalized, ${result.recordsUnmatched} unmatched`
+          );
+        } catch (err: any) {
+          console.error(`[ParserEngine] Fatal error in source ${source.id}:`, err.message);
+          results.push({
+            sourceId: source.id,
+            startedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            durationMs: 0,
+            recordsExtracted: 0,
+            recordsNew: 0,
+            recordsNormalized: 0,
+            recordsUnmatched: 0,
+            errors: [
+              {
+                sourceId: source.id,
+                errorType: "unknown",
+                message: err.message,
+                timestamp: new Date().toISOString(),
+                retryCount: 0,
+              },
+            ],
+            isSuccessful: false,
+          });
+        }
+      }
+
+      console.log(`[ParserEngine] Completed. ${results.filter((r) => r.isSuccessful).length}/${sources.length} successful.`);
+      return results;
+    } finally {
+      ParserEngine.isLocked = false;
+    }
   }
 
   /** Run a single source by ID. */

@@ -48,22 +48,30 @@ export class TopdocProvider extends BaseMedicalProvider {
     const result: IngestionResult["tariffs"] = [];
 
     $("section.companyInfo").each((_, sec) => {
-      const secHtml = $(sec).html() || "";
-      const sec$ = cheerio.load(secHtml);
+      try {
+        const secHtml = $(sec).html() || "";
+        const sec$ = cheerio.load(secHtml);
 
-      const clinicName = sec$(".title").first().text().trim();
-      if (!clinicName) return;
+        const clinicName = sec$(".title").first().text().trim();
+        if (!clinicName) return;
 
-      const fullText = sec$.text();
-      const addr = fullText.match(/([^,\n]+,\s*(?:Алматы|Астана|Шымкент|Караганда))/);
-      const phone = fullText.match(/\+7\s?\(?\d{3}\)?\s?\d{3}\s?\d{2}\s?\d{2}/)?.[0] || "";
+        const fullText = sec$.text();
+        const addr = fullText.match(/([^,\n]+,\s*(?:Алматы|Астана|Шымкент|Караганда))/);
+        const phone = fullText.match(/\+7\s?\(?\d{3}\)?\s?\d{3}\s?\d{2}\s?\d{2}/)?.[0] || "";
 
-      sec$("div.price").each((_, el) => {
-        const price = parsePrice(sec$(el).text());
-        if (price === 0) return;
-        const name = sec$(el).prevAll("a").first().text().trim() || "";
-        if (name) result.push({ clinicName, rawServiceName: name, priceKzt: price, osmsEligible: false, phone, address: addr?.[1]?.trim() || "" });
-      });
+        sec$("div.price").each((_, el) => {
+          try {
+            const price = parsePrice(sec$(el).text());
+            if (price === 0) return;
+            const name = sec$(el).prevAll("a").first().text().trim() || "";
+            if (name) result.push({ clinicName, rawServiceName: name, priceKzt: price, osmsEligible: false, phone, address: addr?.[1]?.trim() || "" });
+          } catch (innerPriceErr: any) {
+            console.warn("[TopdocProvider] Broken price element layout:", innerPriceErr.message);
+          }
+        });
+      } catch (innerSecErr: any) {
+        console.warn("[TopdocProvider] Broken companyInfo section layout:", innerSecErr.message);
+      }
     });
 
     return result;

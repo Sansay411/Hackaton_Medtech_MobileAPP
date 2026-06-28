@@ -72,4 +72,16 @@ export const addDoc = async (...args: any[]) => { const colRef = args[0]; const 
 export const deleteDoc = async (...args: any[]) => { const docRef = args[0]; await apiCall(`/api/db/${docRef?.path}/${docRef?.id}`, "DELETE"); };
 export const getDoc = async (...args: any[]) => { const docRef = args[0]; const list = await apiCall(`/api/db/${docRef?.path}?id=${docRef?.id}`); const item = list[0]; return { exists: () => !!item, data: () => item || null, id: docRef?.id } as any; };
 export const onSnapshot = (...args: any[]) => { getDocs(args[0]).then(args[1]); return () => {}; };
-export const writeBatch = (...args: any[]) => ({ set: () => {}, commit: async () => {} } as any);
+export const writeBatch = (...args: any[]) => {
+  const operations: Array<{ docRef: any; data: any }> = [];
+  return {
+    set: (docRef: any, data: any) => {
+      operations.push({ docRef, data });
+    },
+    commit: async () => {
+      for (const op of operations) {
+        await setDoc(op.docRef, op.data);
+      }
+    }
+  } as any;
+};

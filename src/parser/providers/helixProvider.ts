@@ -25,17 +25,21 @@ export class HelixProvider extends BaseMedicalProvider {
       const $ = cheerio.load(response.data);
 
       $(".price-row, .service-item, .analysis-card, tr").each((_, el) => {
-        const serviceName = $(el).find(".name, .title, td:first-child, .service-title").text().trim();
-        const priceText = $(el).find(".price, .cost, td:last-child, [class*=price]").text().trim();
-        const price = parsePrice(priceText);
-        if (serviceName && price > 0) {
-          tariffs.push({
-            clinicName: "Helix",
-            rawServiceName: serviceName,
-            priceKzt: price,
-            osmsEligible: false,
-            phone: "+7 (727) 356-06-06",
-          });
+        try {
+          const serviceName = $(el).find(".name, .title, td:first-child, .service-title").text().trim();
+          const priceText = $(el).find(".price, .cost, td:last-child, [class*=price]").text().trim();
+          const price = parsePrice(priceText);
+          if (serviceName && price > 0) {
+            tariffs.push({
+              clinicName: "Helix",
+              rawServiceName: serviceName,
+              priceKzt: price,
+              osmsEligible: false,
+              phone: "+7 (727) 356-06-06",
+            });
+          }
+        } catch (innerErr: any) {
+          console.warn("[HelixProvider] Broken row layout or empty cell:", innerErr.message);
         }
       });
 

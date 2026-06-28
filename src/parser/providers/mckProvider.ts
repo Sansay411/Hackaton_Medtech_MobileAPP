@@ -24,17 +24,21 @@ export class MckProvider extends BaseMedicalProvider {
       const $ = cheerio.load(response.data);
 
       $(".tariff-table tr, .service-row, .price-row, tr, [class*=service]").each((_, el) => {
-        const serviceName = $(el).find(".name, .title, .service-name, td:first-child").text().trim();
-        const priceText = $(el).find(".price, .cost, td:last-child, [class*=price]").text().trim();
-        const price = parsePrice(priceText);
-        if (serviceName && price > 0) {
-          tariffs.push({
-            clinicName: "МЦК",
-            rawServiceName: serviceName,
-            priceKzt: price,
-            osmsEligible: true,
-            phone: "+7 (727) 390-20-20",
-          });
+        try {
+          const serviceName = $(el).find(".name, .title, .service-name, td:first-child").text().trim();
+          const priceText = $(el).find(".price, .cost, td:last-child, [class*=price]").text().trim();
+          const price = parsePrice(priceText);
+          if (serviceName && price > 0) {
+            tariffs.push({
+              clinicName: "МЦК",
+              rawServiceName: serviceName,
+              priceKzt: price,
+              osmsEligible: true,
+              phone: "+7 (727) 390-20-20",
+            });
+          }
+        } catch (innerErr: any) {
+          console.warn("[MckProvider] Broken row layout or empty cell:", innerErr.message);
         }
       });
 

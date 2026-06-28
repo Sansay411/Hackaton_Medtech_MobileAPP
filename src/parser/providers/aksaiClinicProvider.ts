@@ -24,17 +24,21 @@ export class AksaiClinicProvider extends BaseMedicalProvider {
       const $ = cheerio.load(response.data);
 
       $(".price-table tr, .service-item, tr, [class*=price] li, li").each((_, el) => {
-        const serviceName = $(el).find(".name, .title, td:first-child, .service-name").text().trim();
-        const priceText = $(el).find(".price, .cost, td:last-child, [class*=price]").text().trim();
-        const price = parsePrice(priceText);
-        if (serviceName && price > 0) {
-          tariffs.push({
-            clinicName: "Аксайская клиника",
-            rawServiceName: serviceName,
-            priceKzt: price,
-            osmsEligible: true,
-            phone: "+7 (727) 390-10-10",
-          });
+        try {
+          const serviceName = $(el).find(".name, .title, td:first-child, .service-name").text().trim();
+          const priceText = $(el).find(".price, .cost, td:last-child, [class*=price]").text().trim();
+          const price = parsePrice(priceText);
+          if (serviceName && price > 0) {
+            tariffs.push({
+              clinicName: "Аксайская клиника",
+              rawServiceName: serviceName,
+              priceKzt: price,
+              osmsEligible: true,
+              phone: "+7 (727) 390-10-10",
+            });
+          }
+        } catch (innerErr: any) {
+          console.warn("[AksaiClinicProvider] Broken row layout or empty cell:", innerErr.message);
         }
       });
 
