@@ -1600,51 +1600,63 @@ ${cleanedText}
     }
   });
 
-  // GET /api/parser/sources — List all source configs with stats
+  // GET /api/parser/sources — List all source configs with stats + MongoDB overrides
   app.get("/api/parser/sources", async (_req, res) => {
-    const sources = await Promise.all(PARSER_SOURCES.map(async (s: any) => {
-      let recordCount = 0;
-      let lastRun = null;
-      if (s.isActive) {
-        try {
-          const { getDb } = await import("./src/lib/mongodb");
-          const db = await getDb();
-          // Get un-geocoded count by city and by provider name match
-          const providerKeyword = s.providerClass.replace(/Provider$/, '').toLowerCase();
-          if (s.url) {
-            const urlHost = s.url.replace(/^https?:\/\//, '').split('/')[0];
-            recordCount = await db.collection("rawTariffs").countDocuments({
-              city: { $regex: new RegExp(s.city, "i") },
-              sourceUrl: { $regex: urlHost, $options: "i" },
-            });
-          }
-          if (recordCount === 0 && providerKeyword) {
-            // Match by clinic name containing provider keyword
-            recordCount = await db.collection("rawTariffs").countDocuments({
-              city: { $regex: new RegExp(s.city, "i") },
-              $or: [
-                { clinicName: { $regex: providerKeyword, $options: "i" } },
-                { sourceUrl: { $regex: providerKeyword, $options: "i" } },
-              ],
-            });
-          }
-        } catch {}
-        try {
-          const { getDb } = await import("./src/lib/mongodb");
-          const db = await getDb();
-          const log = await db.collection("runLogs").findOne({ sourceId: s.id }, { sort: { startedAt: -1 } });
-          if (log) lastRun = log.completedAt || log.startedAt;
-        } catch {}
-      }
-      return {
-        id: s.id, name: s.name, url: s.url, city: s.city,
-        format: s.format, isActive: s.isActive,
-        description: s.description || "",
-        status: s.status || (s.isActive ? "unknown" : "disabled"),
-        recordCount, lastRun,
-      };
-    }));
-    res.json({ sources });
+    try {
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+      // Get overrides from MongoDB (toggle/delete/add operations)
+      const configOverrides = await db.collection("parserConfig").find({}).toArray();
+      const deletedIds = new Set(configOverrides.filter(c => c._deleted).map(c => c.id));
+      const toggleMap = new Map(configOverrides.filter(c => !c._deleted).map(c => [c.id, c]));
+      const customSources = configOverrides.filter(c => c.isCustom && !c._deleted);
+
+      const allSources = [...PARSER_SOURCES, ...customSources];
+
+      const sources = await Promise.all(allSources.map(async (s: any) => {
+        if (deletedIds.has(s.id)) return null;
+        const override = toggleMap.get(s.id);
+        const isActive = override !== undefined ? override.isActive : s.isActive;
+
+        let recordCount = 0, lastRun = null;
+        if (isActive) {
+          try {
+            const providerKeyword = s.providerClass?.replace(/Provider$/, '').toLowerCase();
+            if (s.url) {
+              const urlHost = s.url.replace(/^https?:\/\//, '').split('/')[0];
+              recordCount = await db.collection("rawTariffs").countDocuments({
+                city: { $regex: new RegExp(s.city || "", "i") },
+                sourceUrl: { $regex: urlHost, $options: "i" },
+              });
+            }
+            if (recordCount === 0 && providerKeyword) {
+              recordCount = await db.collection("rawTariffs").countDocuments({
+                city: { $regex: new RegExp(s.city || "", "i") },
+                $or: [
+                  { clinicName: { $regex: providerKeyword, $options: "i" } },
+                  { sourceUrl: { $regex: providerKeyword, $options: "i" } },
+                ],
+              });
+            }
+          } catch {}
+          try {
+            const log = await db.collection("runLogs").findOne({ sourceId: s.id }, { sort: { startedAt: -1 } });
+            if (log) lastRun = log.completedAt || log.startedAt;
+          } catch {}
+        }
+        return {
+          id: s.id, name: s.name, url: s.url || "", city: s.city,
+          format: s.format || "html", isActive,
+          description: s.description || s.name || "",
+          status: isActive ? (s.status || "unknown") : "disabled",
+          recordCount, lastRun, providerClass: s.providerClass || "FirecrawlProvider",
+        };
+      }));
+
+      res.json({ sources: sources.filter(Boolean) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // GET /api/parser/raw-tariffs — Get raw tariff records
@@ -1710,6 +1722,56 @@ ${cleanedText}
         { sort: { parsedAt: -1 } }
       );
       res.json({ success: true, timestamp: lastTariff?.parsedAt || new Date().toISOString() });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── Source management endpoints ──────────────────────────────────────
+  app.post("/api/parser/toggle-source", async (req, res) => {
+    try {
+      const { sourceId } = req.body;
+      if (!sourceId) return res.status(400).json({ error: "sourceId required" });
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+      const existing = await db.collection("parserConfig").findOne({ id: sourceId });
+      if (existing) {
+        const newStatus = existing.isActive === false;
+        await db.collection("parserConfig").updateOne({ id: sourceId }, { $set: { isActive: newStatus } });
+        return res.json({ success: true, sourceId, isActive: newStatus });
+      }
+      await db.collection("parserConfig").insertOne({ id: sourceId, isActive: false });
+      res.json({ success: true, sourceId, isActive: false });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/parser/add-source", async (req, res) => {
+    try {
+      const { id, name, url, city, providerClass = "FirecrawlProvider", format = "html" } = req.body;
+      if (!id || !name || !city) return res.status(400).json({ error: "id, name, city required" });
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+      await db.collection("parserConfig").insertOne({ id, name, url, city, providerClass, format, isActive: true, isCustom: true });
+      res.json({ success: true, source: { id, name, url, city, providerClass, format, isActive: true } });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post("/api/parser/delete-source", async (req, res) => {
+    try {
+      const { sourceId } = req.body;
+      if (!sourceId) return res.status(400).json({ error: "sourceId required" });
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+      const existing = await db.collection("parserConfig").findOne({ id: sourceId });
+      if (existing?.isCustom) {
+        await db.collection("parserConfig").deleteOne({ id: sourceId });
+      } else {
+        // Built-in source: mark as deleted
+        await db.collection("parserConfig").updateOne(
+          { id: sourceId },
+          { $set: { id: sourceId, _deleted: true } },
+          { upsert: true }
+        );
+      }
+      res.json({ success: true, sourceId });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 

@@ -9,3 +9,4 @@ export { MckProvider } from "./mckProvider";
 export { PdfFileProvider } from "./pdfFileProvider";
 export { TopdocProvider } from "./topdocProvider";
 export { DgisProvider } from "./dgisProvider";
+export { FirecrawlProvider } from "./firecrawlProvider";

@@ -10,6 +10,7 @@ import { SERVICES_CATALOG, NormalizedService } from "../data/servicesCatalog";
 import { db, collection, getDocs, setDoc, doc, addDoc, deleteDoc, onSnapshot, writeBatch } from "../lib/dbBridge";
 import { BlogPost } from "../types";
 import Logo from "./Logo";
+import SourcesManager from "./SourcesManager";
 
 interface ScrapedRawItem {
   id: string;
@@ -56,7 +57,7 @@ export default function AdminHub({
   currentCity?: string;
   onAddLogMessage?: (msg: string) => void;
 }) {
-  const [activeSubTab, setActiveSubTab] = useState<"parser" | "catalog" | "unmatched" | "alerts" | "blog">("parser");
+  const [activeSubTab, setActiveSubTab] = useState<"parser" | "sources" | "catalog" | "unmatched" | "alerts" | "blog">("parser");
   const [city, setCity] = useState(currentCity);
   
   // Blog states
@@ -609,6 +610,7 @@ export default function AdminHub({
             <nav className="space-y-1">
               {[
                 { id: "parser", label: "Автоматический Парсер", icon: Database },
+                { id: "sources", label: "Источники", icon: Layers },
                 { id: "catalog", label: "Справочник Услуг", icon: ListFilter },
                 { id: "unmatched", label: "Очередь Разметки", icon: AlertTriangle, count: unmatchedQueue.length },
                 { id: "alerts", label: "Подписки на Тарифы", icon: Bell, count: subscriptions.length },
@@ -757,7 +759,10 @@ export default function AdminHub({
             ))}
           </div>
 
-          {/* TAB SUB 2: AUTOMATED CRAWLER & ERROR LOGS */}
+          {/* TAB SUB 2: SOURCES MANAGER */}
+          {activeSubTab === "sources" && <SourcesManager />}
+
+          {/* TAB SUB 3: AUTOMATED CRAWLER & ERROR LOGS */}
           {activeSubTab === "parser" && (
             <div className="space-y-6">
               

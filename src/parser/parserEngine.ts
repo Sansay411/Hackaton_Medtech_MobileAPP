@@ -21,6 +21,7 @@ import {
   PdfFileProvider,
   TopdocProvider,
   DgisProvider,
+  FirecrawlProvider,
 } from "./providers/index";
 
 export class ParserEngine {
@@ -47,6 +48,7 @@ export class ParserEngine {
       MckProvider,
       TopdocProvider,
       DgisProvider,
+      FirecrawlProvider,
     };
     const ProviderClass = providerMap[source.providerClass];
     if (!ProviderClass) {
