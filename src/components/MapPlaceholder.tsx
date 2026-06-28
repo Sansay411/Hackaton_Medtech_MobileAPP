@@ -160,13 +160,22 @@ export default function MapPlaceholder({
     mapglScript.src = "https://mapgl.2gis.com/api/js/v1";
     mapglScript.async = true;
     mapglScript.onload = () => {
-      const directionsScript = document.createElement("script");
-      directionsScript.src = "https://unpkg.com/@2gis/mapgl-directions@^2/dist/directions.js";
-      directionsScript.async = true;
-      directionsScript.onload = () => {
+      try {
+        const directionsScript = document.createElement("script");
+        directionsScript.src = "https://unpkg.com/@2gis/mapgl-directions@2.0.8/dist/directions.umd.js";
+        directionsScript.async = true;
+        directionsScript.onload = () => {
+          setMapglLoaded(true);
+        };
+        directionsScript.onerror = () => {
+          console.warn("[Map] Directions script failed to load, routes disabled");
+          setMapglLoaded(true); // Still enable the map, just without routing
+        };
+        document.body.appendChild(directionsScript);
+      } catch (e) {
+        console.warn("[Map] Failed to init directions:", e);
         setMapglLoaded(true);
-      };
-      document.body.appendChild(directionsScript);
+      }
     };
     document.body.appendChild(mapglScript);
   }, []);
@@ -284,34 +293,54 @@ export default function MapPlaceholder({
           : [currentCenter.lng, currentCenter.lat]; // [longitude, latitude]
         const end = [activeMarker.lng, activeMarker.lat]; // [longitude, latitude]
 
+        if (!(window as any).mapgl?.Directions) {
+          console.warn("[Map] Directions API not available");
+          setRouteStats(null);
+          return;
+        }
+
         const directions = new mapgl.Directions(mapInstance, {
           directionsApiKey: "26c65059-f062-4a91-a973-b8a38fedf562"
         });
 
+        const routeTimeout = setTimeout(() => {
+          console.warn("[Map] Route building timeout — using straight-line distance");
+          const R = 6371;
+          const dLat = (end[1] - start[0]) * Math.PI / 180;
+          const dLon = (end[0] - start[1]) * Math.PI / 180;
+          const dist = Math.sqrt(dLat*dLat + dLon*dLon) * R;
+          setRouteStats({ distance: `${dist.toFixed(1)} км`, duration: `${Math.round(dist * 12)} мин` });
+        }, 8000);
+
         directions.on("routingSuccess", (data: any) => {
+          clearTimeout(routeTimeout);
           const route = data.routes[0];
           if (route) {
             const lengthMeters = route.distance || route.length || 0;
             const durationSeconds = route.duration || 0;
-            const distanceKm = (lengthMeters / 1000).toFixed(1);
-            const durationMin = Math.round(durationSeconds / 60);
             setRouteStats({
-              distance: `${distanceKm} км`,
-              duration: `${durationMin} мин`
+              distance: `${(lengthMeters / 1000).toFixed(1)} км`,
+              duration: `${Math.round(durationSeconds / 60)} мин`
             });
           }
         });
 
         directions.on("routingError", (err: any) => {
+          clearTimeout(routeTimeout);
           console.error("2GIS Route build error:", err);
           setRouteStats(null);
         });
 
-        directions.carRoute({
-          points: [start, end]
-        });
-
-        activeRouteRef.current = directions;
+        try {
+          directions.carRoute({
+            points: [start, end]
+          });
+          activeRouteRef.current = directions;
+        } catch (e: any) {
+          clearTimeout(routeTimeout);
+          console.warn("[Map] Route build exception:", e);
+          setRouteStats(null);
+        }
       }
     } else {
       setRouteStats(null);
