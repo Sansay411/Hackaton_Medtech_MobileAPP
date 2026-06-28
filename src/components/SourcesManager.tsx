@@ -11,6 +11,7 @@ export default function SourcesManager() {
   const [loading, setLoading] = useState(true);
   const [runningMap, setRunningMap] = useState<Record<string, boolean>>({});
   const [logs, setLogs] = useState<string[]>(["[СИСТЕМА] Менеджер источников загружен. Выберите источник для запуска парсера."]);
+  const [error, setError] = useState("");
   const [newId, setNewId] = useState("");
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
@@ -20,12 +21,14 @@ export default function SourcesManager() {
     setLoading(true);
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
+      const timeout = setTimeout(() => controller.abort(), 30000);
       const r = await fetch("/api/parser/sources", { signal: controller.signal });
       clearTimeout(timeout);
       const d = await r.json();
       setSources(d.sources || []);
+      setError("");
     } catch (err: any) {
+      setError(err.name === 'AbortError' ? 'Таймаут соединения с сервером. Перезагрузите страницу.' : 'Ошибка загрузки: ' + err.message);
       console.error("Sources load error:", err);
     }
     setLoading(false);
@@ -127,7 +130,14 @@ export default function SourcesManager() {
             <div className="text-center py-10 text-slate-400 text-xs font-bold">Загрузка...</div>
           )}
           {sources.length === 0 && !loading && (
-            <div className="text-center py-10 text-slate-400 text-xs font-bold">Нет источников</div>
+            <div className="text-center py-10">
+              <p className="text-slate-400 text-xs font-bold mb-3">{error || "Нет источников"}</p>
+              {error && (
+                <button onClick={fetchSources} className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider rounded-xl hover:bg-blue-700 transition cursor-pointer">
+                  Повторить загрузку
+                </button>
+              )}
+            </div>
           )}
           {sources.map((src) => (
             <div key={src.id} className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 ${
