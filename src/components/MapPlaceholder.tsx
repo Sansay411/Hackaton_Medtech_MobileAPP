@@ -273,73 +273,31 @@ export default function MapPlaceholder({
     }
   }, [mapInstance, activeMarkerId]);
 
-  // Handle dynamic routing
+  // Calculate route (track current props via ref for callback freshness)
+  const routePropsRef = useRef({ markers, activeMarkerId, userLocation, currentCenter });
+  useEffect(() => { routePropsRef.current = { markers, activeMarkerId, userLocation, currentCenter }; });
+
+  // When "Маршрут" clicked: calculate distance IMMEDIATELY
   useEffect(() => {
-    if (!mapInstance || !mapglLoaded || !(window as any).mapgl) return;
-
-    const mapgl = (window as any).mapgl;
-
-    // Clear old route
-    if (activeRouteRef.current) {
-      activeRouteRef.current.clear();
-      activeRouteRef.current = null;
-    }
-
     if (isRoutingActive && activeMarkerId) {
-      const activeMarker = markers.find((m) => m.id === activeMarkerId);
-      if (activeMarker) {
-        const start = userLocation 
-          ? [userLocation.lng, userLocation.lat] 
-          : [currentCenter.lng, currentCenter.lat]; // [longitude, latitude]
-        const end = [activeMarker.lng, activeMarker.lat]; // [longitude, latitude]
-
-        // Calculate route — try 2GIS API, fallback to geodesic calculation
-        const calcGeoRoute = () => {
-          const R = 6371;
-          // start = [lng, lat], end = [lng, lat]
-          const fromLat = start[1], fromLng = start[0];
-          const toLat = end[1], toLng = end[0];
-          const dLat = (toLat - fromLat) * Math.PI / 180;
-          const dLon = (toLng - fromLng) * Math.PI / 180;
-          const a = Math.sin(dLat/2)**2 + Math.cos(fromLat * Math.PI/180) * Math.cos(toLat * Math.PI/180) * Math.sin(dLon/2)**2;
-          const distKm = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          setRouteStats({ distance: `${distKm.toFixed(1)} км`, duration: `${Math.round(distKm * 12)} мин` });
-        };
-
-        if ((window as any).mapgl?.Directions) {
-          try {
-            const directions = new mapgl.Directions(mapInstance, {
-              directionsApiKey: "26c65059-f062-4a91-a973-b8a38fedf562"
-            });
-
-            const timer = setTimeout(() => { calcGeoRoute(); try { directions.clear(); } catch {} }, 5000);
-
-            directions.on("routingSuccess", (data: any) => {
-              clearTimeout(timer);
-              const route = data.routes?.[0];
-              if (route) {
-                const meters = route.distance || route.length || 0;
-                const secs = route.duration || 0;
-                if (meters > 0) {
-                  setRouteStats({ distance: `${(meters/1000).toFixed(1)} км`, duration: `${Math.round(secs/60)} мин` });
-                  return;
-                }
-              }
-              calcGeoRoute();
-            });
-
-            directions.on("routingError", () => { clearTimeout(timer); calcGeoRoute(); });
-            directions.carRoute({ points: [start, end] });
-            activeRouteRef.current = directions;
-          } catch { calcGeoRoute(); }
-        } else {
-          calcGeoRoute();
-        }
+      const { markers, userLocation, currentCenter } = routePropsRef.current;
+      const marker = markers.find(m => m.id === activeMarkerId);
+      if (marker) {
+        const fromLat = userLocation?.lat || currentCenter.lat;
+        const fromLng = userLocation?.lng || currentCenter.lng;
+        const toLat = marker.lat || currentCenter.lat;
+        const toLng = marker.lng || currentCenter.lng;
+        const R = 6371;
+        const dLat = (toLat - fromLat) * Math.PI / 180;
+        const dLon = (toLng - fromLng) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(fromLat*Math.PI/180) * Math.cos(toLat*Math.PI/180) * Math.sin(dLon/2)**2;
+        const distKm = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        setRouteStats({ distance: `${distKm.toFixed(1)} км`, duration: `${Math.round(distKm * 15)} мин` });
       }
     } else {
       setRouteStats(null);
     }
-  }, [mapInstance, isRoutingActive, activeMarkerId, userLocation, mapglLoaded]);
+  }, [isRoutingActive, activeMarkerId]);
 
   // Locate User action
   const locateUser = () => {
