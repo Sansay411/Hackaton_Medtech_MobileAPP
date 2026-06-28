@@ -296,12 +296,14 @@ export default function MapPlaceholder({
         // Calculate route — try 2GIS API, fallback to geodesic calculation
         const calcGeoRoute = () => {
           const R = 6371;
-          const toRad = (d: number) => d * Math.PI / 180;
-          const dLat = toRad(end[1] - start[0]);
-          const dLon = toRad(end[0] - start[1]);
-          const a = Math.sin(dLat/2)**2 + Math.cos(toRad(start[0]))*Math.cos(toRad(end[1]))*Math.sin(dLon/2)**2;
-          const dist = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          setRouteStats({ distance: `${dist.toFixed(1)} км`, duration: `${Math.round(dist * 12)} мин` });
+          // start = [lng, lat], end = [lng, lat]
+          const fromLat = start[1], fromLng = start[0];
+          const toLat = end[1], toLng = end[0];
+          const dLat = (toLat - fromLat) * Math.PI / 180;
+          const dLon = (toLng - fromLng) * Math.PI / 180;
+          const a = Math.sin(dLat/2)**2 + Math.cos(fromLat * Math.PI/180) * Math.cos(toLat * Math.PI/180) * Math.sin(dLon/2)**2;
+          const distKm = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          setRouteStats({ distance: `${distKm.toFixed(1)} км`, duration: `${Math.round(distKm * 12)} мин` });
         };
 
         if ((window as any).mapgl?.Directions) {

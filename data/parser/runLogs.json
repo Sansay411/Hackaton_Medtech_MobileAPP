@@ -154,5 +154,89 @@
     "recordsUnmatched": 0,
     "errorCount": 0,
     "isSuccessful": true
+  },
+  {
+    "sourceId": "invitro-almaty",
+    "startedAt": "2026-06-28T10:56:51.252Z",
+    "completedAt": "2026-06-28T11:00:08.104Z",
+    "durationMs": 196852,
+    "recordsExtracted": 2500,
+    "recordsNew": 500,
+    "recordsNormalized": 265,
+    "recordsUnmatched": 235,
+    "errorCount": 0,
+    "isSuccessful": true
+  },
+  {
+    "sourceId": "invitro-astana",
+    "startedAt": "2026-06-28T11:00:08.104Z",
+    "completedAt": "2026-06-28T11:00:43.192Z",
+    "durationMs": 35088,
+    "recordsExtracted": 1500,
+    "recordsNew": 493,
+    "recordsNormalized": 262,
+    "recordsUnmatched": 231,
+    "errorCount": 0,
+    "isSuccessful": true
+  },
+  {
+    "sourceId": "invitro-karaganda",
+    "startedAt": "2026-06-28T11:00:43.193Z",
+    "completedAt": "2026-06-28T11:01:33.025Z",
+    "durationMs": 49832,
+    "recordsExtracted": 1000,
+    "recordsNew": 500,
+    "recordsNormalized": 263,
+    "recordsUnmatched": 237,
+    "errorCount": 0,
+    "isSuccessful": true
+  },
+  {
+    "sourceId": "invitro-shymkent",
+    "startedAt": "2026-06-28T11:01:33.026Z",
+    "completedAt": "2026-06-28T11:02:20.278Z",
+    "durationMs": 47252,
+    "recordsExtracted": 1000,
+    "recordsNew": 500,
+    "recordsNormalized": 263,
+    "recordsUnmatched": 237,
+    "errorCount": 0,
+    "isSuccessful": true
+  },
+  {
+    "sourceId": "doq-kz",
+    "startedAt": "2026-06-28T11:02:20.278Z",
+    "completedAt": "2026-06-28T11:02:29.555Z",
+    "durationMs": 9277,
+    "recordsExtracted": 0,
+    "recordsNew": 0,
+    "recordsNormalized": 0,
+    "recordsUnmatched": 0,
+    "errorCount": 0,
+    "isSuccessful": true
+  },
+  {
+    "sourceId": "topdoc-almaty-laboratories",
+    "startedAt": "2026-06-28T11:02:29.557Z",
+    "completedAt": "2026-06-28T11:02:32.840Z",
+    "durationMs": 3283,
+    "recordsExtracted": 122,
+    "recordsNew": 0,
+    "recordsNormalized": 0,
+    "recordsUnmatched": 0,
+    "errorCount": 0,
+    "isSuccessful": true
+  },
+  {
+    "sourceId": "topdoc-almaty-clinics",
+    "startedAt": "2026-06-28T11:02:32.841Z",
+    "completedAt": "2026-06-28T11:02:35.728Z",
+    "durationMs": 2887,
+    "recordsExtracted": 122,
+    "recordsNew": 0,
+    "recordsNormalized": 0,
+    "recordsUnmatched": 0,
+    "errorCount": 0,
+    "isSuccessful": true
   }
 ]

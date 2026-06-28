@@ -1041,7 +1041,9 @@ export default function App() {
   }, [sortBy, osmsFilter]);
 
   const handleBookClinic = (clinicId: string) => {
-    const clinic = clinics.find(c => c.id === clinicId);
+    // Map marker IDs differ from clinic IDs — search by name match fallback
+    const clinic = clinics.find(c => c.id === clinicId)
+      || clinics.find(c => clinicId.includes(c.name.substring(0, 10).toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")) || c.name.toLowerCase().includes(clinicId.toLowerCase()));
     if (clinic) {
       setSelectedClinic(clinic);
       setBookingPatientName(userName !== "Гость" && userName !== "" ? userName : "");
