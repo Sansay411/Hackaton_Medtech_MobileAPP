@@ -1821,14 +1821,32 @@ ${cleanedText}
     } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
-  // POST /api/parser/run-source — Run a single source by ID
+  // POST /api/parser/run-source — Run a single source by ID (supports custom sources)
   app.post("/api/parser/run-source", async (req, res) => {
     try {
       const { sourceId } = req.body;
       if (!sourceId) return res.status(400).json({ error: "sourceId required" });
       const { ParserEngine } = await import("./src/parser/parserEngine");
       const engine = new ParserEngine();
-      const result = await engine.runSourceById(sourceId);
+      let result = await engine.runSourceById(sourceId);
+      // If not found in PARSER_SOURCES, try custom source from parserConfig
+      if (!result) {
+        const { getDb } = await import("./src/lib/mongodb");
+        const db = await getDb();
+        const custom = await db.collection("parserConfig").findOne({ id: sourceId, _deleted: { $ne: true } });
+        if (custom) {
+          const source = {
+            id: custom.id,
+            name: custom.name || sourceId,
+            providerClass: custom.providerClass || "FirecrawlProvider",
+            url: custom.url || "",
+            city: custom.city || "Алматы",
+            format: custom.format || "html",
+            isActive: true,
+          };
+          result = await engine.runSource(source as any);
+        }
+      }
       if (!result) return res.status(404).json({ error: "Source not found" });
       res.json({ success: true, result });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
