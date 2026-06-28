@@ -18,7 +18,14 @@ app.use((req, res, next) => {
 let _db = null, _client = null;
 async function getDb() {
   if (_db) return _db;
-  _client = new MongoClient(process.env.MONGODB_URI || "");
+  const uri = process.env.MONGODB_URI || "";
+  if (!uri) throw new Error("MONGODB_URI not configured");
+  _client = new MongoClient(uri, {
+    tls: true,
+    tlsAllowInvalidCertificates: false,
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+  });
   await _client.connect();
   _db = _client.db();
   return _db;
