@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Plus, Minus, Navigation, Car, Loader2 } from "lucide-react";
 import { MapMarker } from "../types";
 
@@ -301,94 +301,69 @@ export default function MapPlaceholder({
   const routePropsRef = useRef({ markers, activeMarkerId, userLocation, currentCenter });
   useEffect(() => { routePropsRef.current = { markers, activeMarkerId, userLocation, currentCenter }; });
 
-  // When "Маршрут" clicked: get real road route via 2GIS HTTP API + draw polyline
+  // Route polyline ref managed outside effect to avoid closure issues
+  const routePolylineRef = useRef<any>(null);
+
+  // Draw route polyline (callable from button or effect)
+  const drawRoute = useCallback(async (startLng: number, startLat: number, endLng: number, endLat: number) => {
+    const mapgl = (window as any).mapgl;
+    if (!mapgl || !mapInstance) return;
+
+    try {
+      // Try OSRM first for real road route
+      const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?steps=false&geometries=geojson&overview=full&language=ru`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.code === "Ok" && data.routes?.[0]?.geometry?.coordinates?.length > 2) {
+        const r = data.routes[0];
+        const coords = r.geometry.coordinates; // [lng, lat] format — matches 2GIS
+        const km = r.distance / 1000;
+        const min = Math.round(r.duration / 60);
+        setRouteStats({ distance: `${km.toFixed(1)} км`, duration: `${min} мин` });
+
+        if (routePolylineRef.current) { try { routePolylineRef.current.destroy(); } catch {} }
+        routePolylineRef.current = new mapgl.Polyline(mapInstance, {
+          coordinates: coords,
+          color: "#3b82f6", width: 5, opacity: 0.85, dashLength: 0,
+        });
+        return;
+      }
+    } catch {}
+
+    // Fallback: straight line
+    const dLat = (endLat - startLat) * Math.PI / 180;
+    const dLon = (endLng - startLng) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(startLat*Math.PI/180) * Math.cos(endLat*Math.PI/180) * Math.sin(dLon/2)**2;
+    const distKm = 2 * 6371 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    setRouteStats({ distance: `${distKm.toFixed(1)} км (по прямой)`, duration: `${Math.round(distKm * 15)} мин` });
+
+    if (routePolylineRef.current) { try { routePolylineRef.current.destroy(); } catch {} }
+    routePolylineRef.current = new mapgl.Polyline(mapInstance, {
+      coordinates: [[startLng, startLat], [endLng, endLat]],
+      color: "#94a3b8", width: 3, opacity: 0.6, dashLength: 8,
+    });
+  }, [mapInstance]);
+
+  // Trigger route building when "Маршрут" is clicked
   useEffect(() => {
     if (isRoutingActive && activeMarkerId && mapInstance) {
       const { markers, userLocation, currentCenter } = routePropsRef.current;
       const marker = markers.find(m => m.id === activeMarkerId);
-      if (!marker) return;
-
-      const fromLat = userLocation?.lat || currentCenter.lat;
-      const fromLng = userLocation?.lng || currentCenter.lng;
-      const toLat = marker.lat || currentCenter.lat;
-      const toLng = marker.lng || currentCenter.lng;
-
-      let routePolyline: any = null;
-      let destroyed = false;
-
-      // OSRM open-source routing engine — real roads, no API key, no rate limits
-      const fetchRoute = async () => {
-        try {
-          const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?steps=false&geometries=geojson&overview=full&language=ru`;
-          const resp = await fetch(osrmUrl);
-          const data = await resp.json();
-
-          if (data.code === "Ok" && data.routes?.[0]) {
-            const route = data.routes[0];
-            // OSRM returns coordinates as [lng, lat] — directly usable by 2GIS MapGL
-            const coords = route.geometry?.coordinates;
-            const totalKm = route.distance / 1000;
-            const totalMin = Math.round(route.duration / 60);
-
-            if (coords?.length > 2 && !destroyed) {
-              setRouteStats({ distance: `${totalKm.toFixed(1)} км`, duration: `${totalMin} мин` });
-              const mapgl = (window as any).mapgl;
-              if (mapgl) {
-                if (activeRouteRef.current) { try { (activeRouteRef.current as any).destroy(); } catch {} }
-                routePolyline = new mapgl.Polyline(mapInstance, {
-                  coordinates: coords,
-                  color: "#3b82f6",
-                  width: 5,
-                  opacity: 0.85,
-                  dashLength: 0,
-                });
-                activeRouteRef.current = routePolyline;
-              }
-              return;
-            }
-          }
-        } catch (e: any) {
-          console.warn("[Map] OSRM routing error:", e.message);
-        }
-
-        // Fallback: geodesic straight line (dashed)
-        if (!destroyed) {
-          const R = 6371;
-          const dLat = (toLat - fromLat) * Math.PI / 180;
-          const dLon = (toLng - fromLng) * Math.PI / 180;
-          const a = Math.sin(dLat/2)**2 + Math.cos(fromLat*Math.PI/180) * Math.cos(toLat*Math.PI/180) * Math.sin(dLon/2)**2;
-          const distKm = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          setRouteStats({ distance: `${distKm.toFixed(1)} км (по прямой)`, duration: `${Math.round(distKm * 15)} мин` });
-
-          const mapgl = (window as any).mapgl;
-          if (mapgl) {
-            if (activeRouteRef.current) { try { (activeRouteRef.current as any).destroy(); } catch {} }
-            routePolyline = new mapgl.Polyline(mapInstance, {
-              coordinates: [[fromLng, fromLat], [toLng, toLat]],
-              color: "#94a3b8",
-              width: 3,
-              opacity: 0.6,
-              dashLength: 8,
-            });
-            activeRouteRef.current = routePolyline;
-          }
-        }
-      };
-
-      fetchRoute();
-
-      return () => {
-        destroyed = true;
-        if (routePolyline) { try { (routePolyline as any).destroy(); } catch {} }
-        activeRouteRef.current = null;
-        setRouteStats(null);
-      };
+      if (marker) {
+        drawRoute(
+          userLocation?.lng || currentCenter.lng,
+          userLocation?.lat || currentCenter.lat,
+          marker.lng || currentCenter.lng,
+          marker.lat || currentCenter.lat
+        );
+      }
     } else {
       setRouteStats(null);
-      if (activeRouteRef.current) { try { (activeRouteRef.current as any).destroy(); } catch {} }
-      activeRouteRef.current = null;
+      if (routePolylineRef.current) { try { routePolylineRef.current.destroy(); } catch {} }
+      routePolylineRef.current = null;
     }
-  }, [isRoutingActive, activeMarkerId, mapInstance]);
+  }, [isRoutingActive, activeMarkerId, mapInstance, drawRoute]);
 
   // Locate User action
   const locateUser = () => {
