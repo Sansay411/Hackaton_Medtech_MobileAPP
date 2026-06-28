@@ -275,6 +275,62 @@ export const PARSER_SOURCES: SourceConfig[] = [
     format: "html",
     isActive: true,
   },
+
+  // === Government clinic sources ===
+  {
+    id: "gov-almaty-1",
+    name: "Городская поликлиника №1 (Алматы)",
+    providerClass: "GovClinicProvider",
+    url: "https://poliklinika.kz/almaty/1",
+    city: "Алматы",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "gov-almaty-4",
+    name: "Городская поликлиника №4 (Алматы)",
+    providerClass: "GovClinicProvider",
+    url: "https://poliklinika.kz/almaty/4",
+    city: "Алматы",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "gov-almaty-8",
+    name: "Городская поликлиника №8 (Алматы)",
+    providerClass: "GovClinicProvider",
+    url: "https://poliklinika.kz/almaty/8",
+    city: "Алматы",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "gov-oblastnaya",
+    name: "Областная больница (Алматы)",
+    providerClass: "GovClinicProvider",
+    url: "https://okb.kz",
+    city: "Алматы",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "gov-karaganda-crb",
+    name: "ЦРБ Караганда",
+    providerClass: "GovClinicProvider",
+    url: "https://crb.karaganda.kz",
+    city: "Караганда",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "gov-astana-3",
+    name: "Городская поликлиника №3 (Астана)",
+    providerClass: "GovClinicProvider",
+    url: "https://policlinic3.astana.kz",
+    city: "Астана",
+    format: "html",
+    isActive: true,
+  },
 ];
 
 export function getSource(sourceId: string): SourceConfig | undefined {

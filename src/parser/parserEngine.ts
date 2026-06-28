@@ -22,6 +22,7 @@ import {
   TopdocProvider,
   DgisProvider,
   FirecrawlProvider,
+  GovClinicProvider,
 } from "./providers/index";
 
 export class ParserEngine {
@@ -51,6 +52,7 @@ export class ParserEngine {
       TopdocProvider,
       DgisProvider,
       FirecrawlProvider,
+      GovClinicProvider,
     };
     const ProviderClass = providerMap[source.providerClass];
     if (!ProviderClass) {
