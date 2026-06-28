@@ -162,7 +162,7 @@ export default function MapPlaceholder({
     mapglScript.onload = () => {
       try {
         const directionsScript = document.createElement("script");
-        directionsScript.src = "https://unpkg.com/@2gis/mapgl-directions@2.0.8/dist/directions.umd.js";
+        directionsScript.src = "https://unpkg.com/@2gis/mapgl-directions@2.0.8/dist/directions.js";
         directionsScript.async = true;
         directionsScript.onload = () => {
           setMapglLoaded(true);
@@ -417,7 +417,7 @@ export default function MapPlaceholder({
       <button
         onClick={locateUser}
         disabled={locatingUser}
-        className="absolute right-4 bottom-44 p-3 bg-white hover:bg-slate-50 text-slate-700 rounded-2xl border border-slate-200 shadow-md transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 z-10"
+        className="absolute right-4 bottom-52 p-3 bg-white hover:bg-slate-50 text-slate-700 rounded-2xl border border-slate-200 shadow-md transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 z-10"
         title="Определить мое местоположение"
       >
         {locatingUser ? (
@@ -428,7 +428,7 @@ export default function MapPlaceholder({
       </button>
 
       {/* Custom Zoom Buttons */}
-      <div className="absolute right-4 bottom-24 flex flex-col bg-white border border-slate-200 p-1.5 rounded-2xl shadow-md gap-1 z-10">
+      <div className="absolute right-4 bottom-32 flex flex-col bg-white border border-slate-200 p-1.5 rounded-2xl shadow-md gap-1 z-10">
         <button
           onClick={handleZoomIn}
           className="p-2 text-slate-600 hover:text-blue-600 hover:bg-slate-50 rounded-xl transition cursor-pointer"
@@ -448,7 +448,7 @@ export default function MapPlaceholder({
 
       {/* Premium Glassmorphic Clinic Details Panel (Bottom Panel) */}
       {!isRoutingActive && activeMarker && (
-        <div className="absolute bottom-20 left-4 right-4 sm:right-auto sm:max-w-sm bg-white/95 backdrop-blur-md border border-slate-200/80 text-slate-800 rounded-3xl p-4 shadow-xl animate-fade-in z-10">
+        <div className="absolute bottom-28 left-4 right-4 sm:right-auto sm:max-w-sm bg-white/95 backdrop-blur-md border border-slate-200/80 text-slate-800 rounded-3xl p-4 shadow-xl animate-fade-in z-10">
           <div className="flex items-start gap-3">
             {renderBrandLogo(activeMarker.name, "w-12 h-12 rounded-2xl")}
             <div className="flex-1 min-w-0 relative">
@@ -501,7 +501,7 @@ export default function MapPlaceholder({
 
       {/* Premium Glassmorphic Routing Stats Overlay (Bottom Panel) */}
       {isRoutingActive && activeMarker && (
-        <div className="absolute bottom-20 left-4 right-4 sm:right-auto sm:max-w-sm bg-white/95 backdrop-blur-md border border-slate-200/80 text-slate-800 rounded-3xl p-4 shadow-xl animate-fade-in z-10">
+        <div className="absolute bottom-28 left-4 right-4 sm:right-auto sm:max-w-sm bg-white/95 backdrop-blur-md border border-slate-200/80 text-slate-800 rounded-3xl p-4 shadow-xl animate-fade-in z-10">
           <div className="flex items-start gap-3">
             <div className="p-2.5 bg-blue-50 text-blue-600 border border-blue-100/60 rounded-2xl shrink-0 mt-0.5">
               <Car className="w-5 h-5" />

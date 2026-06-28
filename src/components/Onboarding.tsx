@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { MapPin, Search, Phone, ArrowRight, Chrome, CheckCircle2, ShieldCheck, ChevronLeft, Sparkles, Check } from "lucide-react";
-import { auth, googleProvider, signInWithPopup, db, doc, setDoc, handleMongoDBError, OperationType } from "../lib/dbBridge";
+import { auth, googleProvider, signInWithPopup, db, doc, setDoc, handleMongoDBError, OperationType } from "../lib/firebase";
 import Logo from "./Logo";
 import { OnboardingState } from "../types";
 
