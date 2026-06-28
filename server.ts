@@ -816,7 +816,7 @@ async function startServer() {
         { address: { $regex: w, $options: "i" } },
       ]);
       items = await db.collection("rawTariffs")
-        .find({ ...cityFilter, $or: orClauses }).project(PROJECTION).limit(500).toArray();
+        .find({ ...cityFilter, $or: orClauses }).project(PROJECTION).toArray();
 
       // Strategy 2: prefix matching, same city
       if (items.length < 8 && finalSearchWords.some(w => w.length > 4)) {
