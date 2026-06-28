@@ -9,6 +9,8 @@ interface MapPlaceholderProps {
   city: string;
   isRoutingActive?: boolean;
   onCloseRouting?: () => void;
+  onStartRouting?: () => void;
+  onBookClinic?: (clinicId: string) => void;
 }
 
 const getBrandLogoText = (name: string) => {
@@ -24,12 +26,90 @@ const getBrandLogoText = (name: string) => {
   return name.charAt(0).toUpperCase() || "М";
 };
 
+const adjustBrightness = (hex: string, percent: number) => {
+  let R = parseInt(hex.substring(1, 3), 16);
+  let G = parseInt(hex.substring(3, 5), 16);
+  let B = parseInt(hex.substring(5, 7), 16);
+
+  R = Math.max(0, Math.min(255, R + percent));
+  G = Math.max(0, Math.min(255, G + percent));
+  B = Math.max(0, Math.min(255, B + percent));
+
+  const rHex = R.toString(16).padStart(2, "0");
+  const gHex = G.toString(16).padStart(2, "0");
+  const bHex = B.toString(16).padStart(2, "0");
+
+  return `#${rHex}${gHex}${bHex}`;
+};
+
+const getClinicLogoUrl = (name: string) => {
+  const lower = name.toLowerCase();
+  
+  if (lower.includes("олимп") || lower.includes("olymp")) {
+    return "https://kdlolymp.kz/favicons/android-chrome-512x512.png";
+  }
+  if (lower.includes("инвитро") || lower.includes("invitro")) {
+    return "https://invitro.kz/local/templates/invitro_main/src/image/icons/footer/logo.svg";
+  }
+  
+  // Custom styled premium SVG logos for other clinics to prevent DNS/CORS errors
+  let color = "#64748b";
+  let symbol = "";
+  
+  if (lower.includes("инвиво") || lower.includes("invivo")) {
+    color = "#0ea5e9"; // Teal-Blue
+    symbol = `<circle cx="50" cy="50" r="30" fill="none" stroke="white" stroke-width="8"/><path d="M50 30 L50 70 M30 50 L70 50" stroke="white" stroke-width="8"/>`;
+  } else if (lower.includes("сункар") || lower.includes("sunkar")) {
+    color = "#0284c7"; // Sky Blue
+    symbol = `<path d="M30 35 C40 20, 60 20, 70 35 C70 50, 30 50, 30 65 C30 80, 60 80, 70 65" fill="none" stroke="white" stroke-width="10" stroke-linecap="round"/>`;
+  } else if (lower.includes("орхун") || lower.includes("orhun")) {
+    color = "#8b5cf6"; // Purple
+    symbol = `<circle cx="50" cy="50" r="28" fill="none" stroke="white" stroke-width="10"/><circle cx="50" cy="50" r="12" fill="white"/>`;
+  } else if (lower.includes("хак") || lower.includes("hak")) {
+    color = "#10b981"; // Emerald
+    symbol = `<path d="M30 25 L30 75 M70 25 L70 75 M30 50 L70 50" fill="none" stroke="white" stroke-width="10" stroke-linecap="round"/>`;
+  } else if (lower.includes("керуен") || lower.includes("keruen")) {
+    color = "#f59e0b"; // Gold/Amber
+    symbol = `<path d="M30 25 L30 75 M70 25 L35 50 L70 75" fill="none" stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>`;
+  } else if (lower.includes("dau") || lower.includes("дау")) {
+    color = "#ef4444"; // Red
+    symbol = `<path d="M30 25 L50 25 C65 25, 70 35, 70 50 C70 65, 65 75, 50 75 L30 75 Z" fill="none" stroke="white" stroke-width="10" stroke-linejoin="round"/>`;
+  } else if (lower.includes("поликлиника")) {
+    color = "#6366f1"; // Indigo
+    symbol = `<path d="M30 75 L30 25 L70 25 L70 75" fill="none" stroke="white" stroke-width="10" stroke-linecap="round"/>`;
+  } else {
+    // Fallback beautiful text-based SVG logo
+    const firstLetter = name.trim().charAt(0).toUpperCase();
+    return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100" rx="25" fill="${encodeURIComponent(color)}"/><text x="50" y="68" font-family="system-ui, sans-serif" font-size="55" font-weight="bold" fill="white" text-anchor="middle">${firstLetter}</text></svg>`;
+  }
+
+  // Premium vector SVG with grid background and centralized clean symbol
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+    <defs>
+      <linearGradient id="grad-${lower.replace(/[^a-z]/g, "")}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="${color}" />
+        <stop offset="100%" stop-color="${adjustBrightness(color, -20)}" />
+      </linearGradient>
+    </defs>
+    <rect width="100" height="100" rx="25" fill="url(%23grad-${lower.replace(/[^a-z]/g, "")})"/>
+    <circle cx="50" cy="50" r="42" fill="none" stroke="white" stroke-opacity="0.15" stroke-width="1"/>
+    <circle cx="50" cy="50" r="35" fill="none" stroke="white" stroke-opacity="0.1" stroke-width="1"/>
+    <g transform="scale(0.8) translate(12.5, 12.5)">
+      ${symbol}
+    </g>
+  </svg>`;
+
+  return `data:image/svg+xml;utf8,${svg.replace(/#/g, "%23")}`;
+};
+
 const getCityCoords = (cityName: string) => {
   const lower = cityName.toLowerCase();
   if (lower.includes("астана")) return { lat: 51.169392, lng: 71.449074 };
   if (lower.includes("шымкент")) return { lat: 42.3417, lng: 69.5901 };
   if (lower.includes("караганда")) return { lat: 49.8022, lng: 73.0881 };
   if (lower.includes("усть-каменогорск")) return { lat: 49.9482, lng: 82.6277 };
+  if (lower.includes("актобе")) return { lat: 50.2839, lng: 57.1669 };
+  if (lower.includes("павлодар")) return { lat: 52.2873, lng: 76.9674 };
   return { lat: 43.238940, lng: 76.889709 }; // Almaty default
 };
 
@@ -39,93 +119,94 @@ export default function MapPlaceholder({
   onMarkerSelect,
   city,
   isRoutingActive,
-  onCloseRouting
+  onCloseRouting,
+  onStartRouting,
+  onBookClinic
 }: MapPlaceholderProps) {
+  // Bind global marker click handler
+  useEffect(() => {
+    (window as any).onMapMarkerClick = (id: string) => {
+      onMarkerSelect(id);
+    };
+    return () => {
+      delete (window as any).onMapMarkerClick;
+    };
+  }, [onMarkerSelect]);
+
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const [ymapsLoaded, setYmapsLoaded] = useState(false);
+  const [mapglLoaded, setMapglLoaded] = useState(false);
   const [mapInstance, setMapInstance] = useState<any>(null);
   const [zoom, setZoom] = useState(12);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locatingUser, setLocatingUser] = useState(false);
   const [routeStats, setRouteStats] = useState<{ distance: string; duration: string } | null>(null);
 
-  const placemarksRef = useRef<{ [key: string]: any }>({});
+  const markersRef = useRef<{ [key: string]: any }>({});
   const activeRouteRef = useRef<any>(null);
-  const userPlacemarkRef = useRef<any>(null);
+  const userMarkerRef = useRef<any>(null);
 
   const currentCenter = getCityCoords(city);
 
-  // Load Yandex Maps API script dynamically
+  // Load 2GIS MapGL and Directions plugin scripts dynamically
   useEffect(() => {
-    if ((window as any).ymaps) {
-      setYmapsLoaded(true);
+    if ((window as any).mapgl && (window as any).mapgl.Directions) {
+      setMapglLoaded(true);
       return;
     }
-    const script = document.createElement("script");
-    script.src = "https://api-maps.yandex.ru/2.1/?apikey=1d533692-1ee7-4fb7-9201-2165fbb5d14d&lang=ru_RU";
-    script.async = true;
-    script.onload = () => setYmapsLoaded(true);
-    document.body.appendChild(script);
+    const mapglScript = document.createElement("script");
+    mapglScript.src = "https://mapgl.2gis.com/api/js/v1";
+    mapglScript.async = true;
+    mapglScript.onload = () => {
+      const directionsScript = document.createElement("script");
+      directionsScript.src = "https://unpkg.com/@2gis/mapgl-directions@^2/dist/directions.js";
+      directionsScript.async = true;
+      directionsScript.onload = () => {
+        setMapglLoaded(true);
+      };
+      document.body.appendChild(directionsScript);
+    };
+    document.body.appendChild(mapglScript);
   }, []);
 
-  // Initialize Yandex Map
+  // Initialize 2GIS Map
   useEffect(() => {
-    if (!ymapsLoaded || !mapContainerRef.current || !(window as any).ymaps) return;
+    if (!mapglLoaded || !mapContainerRef.current || !(window as any).mapgl) return;
 
-    const ymaps = (window as any).ymaps;
-    ymaps.ready(() => {
-      // Clear container just in case
-      if (mapContainerRef.current) {
-        mapContainerRef.current.innerHTML = "";
-      }
+    const mapgl = (window as any).mapgl;
+    
+    // Clear container just in case
+    if (mapContainerRef.current) {
+      mapContainerRef.current.innerHTML = "";
+    }
 
-      const map = new ymaps.Map(mapContainerRef.current, {
-        center: [currentCenter.lat, currentCenter.lng],
-        zoom: zoom,
-        controls: [] // We render our own premium Tailwind Zoom controls
-      });
-
-      setMapInstance(map);
+    const map = new mapgl.Map(mapContainerRef.current, {
+      center: [currentCenter.lng, currentCenter.lat], // [longitude, latitude]
+      zoom: zoom,
+      key: "26c65059-f062-4a91-a973-b8a38fedf562",
+      zoomControl: false
     });
 
+    setMapInstance(map);
+
     return () => {
+      map.destroy();
       setMapInstance(null);
     };
-  }, [ymapsLoaded, city]);
+  }, [mapglLoaded, city]);
 
   // Handle marker updates
   useEffect(() => {
-    if (!mapInstance || !ymapsLoaded || !(window as any).ymaps) return;
+    if (!mapInstance || !mapglLoaded || !(window as any).mapgl) return;
 
-    const ymaps = (window as any).ymaps;
+    const mapgl = (window as any).mapgl;
 
-    // Clear old placemarks
-    Object.values(placemarksRef.current).forEach((pm) => {
-      mapInstance.geoObjects.remove(pm);
+    // Clear old markers
+    Object.values(markersRef.current).forEach((m: any) => {
+      m.destroy();
     });
-    placemarksRef.current = {};
+    markersRef.current = {};
 
-    // Custom Placemark layout
-    const customPlacemarkLayout = ymaps.templateLayoutFactory.createClass(
-      `<div style="transform: translate(-50%, -100%);" class="relative flex flex-col items-center select-none cursor-pointer">
-         <div class="flex items-center gap-2 bg-white rounded-2xl p-2 shadow-lg border $[properties.borderClass] hover:border-blue-600 transition-all duration-300 w-44 text-left">
-           <div class="w-7 h-7 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xs shrink-0 border border-slate-100">
-             $[properties.logoText]
-           </div>
-           <div class="flex-1 min-w-0 leading-tight">
-             <div class="text-[7.5px] font-black text-slate-400 truncate uppercase tracking-tight">$[properties.clinicName]</div>
-             <div class="text-[11px] font-black text-slate-800 font-mono mt-0.5">$[properties.price] ₸</div>
-           </div>
-           <div class="flex items-center gap-0.5 bg-amber-50 px-1 py-0.5 rounded-lg shrink-0 self-start">
-             <span class="text-amber-500 text-[9px]">★</span>
-             <span class="text-amber-800 text-[8px] font-black">$[properties.rating]</span>
-           </div>
-         </div>
-         <div class="w-2 h-2 bg-white rotate-45 -mt-1.2 border-r border-b $[properties.borderClass]"></div>
-       </div>`
-    );
-
-    // Add new placemarks
+    // Add new markers
     markers.forEach((marker) => {
       const isActive = activeMarkerId === marker.id;
       const simplifiedName = marker.name
@@ -135,99 +216,106 @@ export default function MapPlaceholder({
             .trim()
         : "Клиника";
 
-      const pm = new ymaps.Placemark(
-        [marker.lat, marker.lng],
-        {
-          clinicName: simplifiedName,
-          price: marker.price.toLocaleString(),
-          rating: (marker.rating || 4.5).toFixed(1),
-          logoText: getBrandLogoText(marker.name),
-          borderClass: isActive ? "border-blue-600 ring-2 ring-blue-100" : "border-slate-200"
-        },
-        {
-          iconLayout: customPlacemarkLayout,
-          iconImageSize: [176, 50],
-          iconImageOffset: [-88, -50]
-        }
-      );
+      const htmlContent = `
+        <div onclick="window.onMapMarkerClick('${marker.id}')" style="width: 176px; height: 50px; pointer-events: auto;" class="relative flex flex-col items-center select-none cursor-pointer">
+          <div class="flex items-center gap-2 bg-white rounded-2xl p-2 shadow-lg border ${isActive ? "border-blue-600 ring-2 ring-blue-100" : "border-slate-200"} hover:border-blue-600 transition-all duration-300 w-full h-full text-left">
+            <div class="w-7 h-7 rounded-xl bg-white text-slate-800 flex items-center justify-center font-black text-xs shrink-0 border border-slate-100 overflow-hidden">
+              <img src="${marker.logoUrl || getClinicLogoUrl(marker.name)}" style="width: 100%; height: 100%; object-fit: contain;" />
+            </div>
+            <div class="flex-1 min-w-0 leading-tight">
+              <div class="text-[7.5px] font-black text-slate-400 truncate uppercase tracking-tight">${simplifiedName}</div>
+              <div class="text-[11px] font-black text-slate-800 font-mono mt-0.5">${marker.price.toLocaleString()} ₸</div>
+            </div>
+            <div class="flex items-center gap-0.5 bg-amber-50 px-1 py-0.5 rounded-lg shrink-0 self-start">
+              <span class="text-amber-500 text-[9px]">★</span>
+              <span class="text-amber-800 text-[8px] font-black">${(marker.rating || 4.5).toFixed(1)}</span>
+            </div>
+          </div>
+          <div class="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1 w-2 h-2 bg-white rotate-45 border-r border-b ${isActive ? "border-blue-600" : "border-slate-200"}"></div>
+        </div>
+      `;
 
-      pm.events.add("click", () => {
-        onMarkerSelect(marker.id);
+      const m = new mapgl.HtmlMarker(mapInstance, {
+        coordinates: [marker.lng, marker.lat],
+        html: htmlContent,
+        anchor: [88, 50],
+        interactive: true
       });
 
-      mapInstance.geoObjects.add(pm);
-      placemarksRef.current[marker.id] = pm;
+      markersRef.current[marker.id] = m;
     });
 
-  }, [mapInstance, markers, activeMarkerId]);
+  }, [mapInstance, markers, activeMarkerId, mapglLoaded]);
 
   // Handle active marker changes: center map
   useEffect(() => {
     if (!mapInstance || !activeMarkerId) return;
     const activeMarker = markers.find((m) => m.id === activeMarkerId);
     if (activeMarker) {
-      mapInstance.setCenter([activeMarker.lat, activeMarker.lng], zoom);
+      mapInstance.setCenter([activeMarker.lng, activeMarker.lat]);
     }
   }, [mapInstance, activeMarkerId]);
 
   // Handle dynamic routing
   useEffect(() => {
-    if (!mapInstance || !ymapsLoaded || !(window as any).ymaps) return;
+    if (!mapInstance || !mapglLoaded || !(window as any).mapgl) return;
 
-    const ymaps = (window as any).ymaps;
+    const mapgl = (window as any).mapgl;
 
     // Clear old route
     if (activeRouteRef.current) {
-      mapInstance.geoObjects.remove(activeRouteRef.current);
+      activeRouteRef.current.clear();
       activeRouteRef.current = null;
     }
 
     if (isRoutingActive && activeMarkerId) {
       const activeMarker = markers.find((m) => m.id === activeMarkerId);
       if (activeMarker) {
-        const start = userLocation ? [userLocation.lat, userLocation.lng] : [currentCenter.lat, currentCenter.lng];
-        const end = [activeMarker.lat, activeMarker.lng];
+        const start = userLocation 
+          ? [userLocation.lng, userLocation.lat] 
+          : [currentCenter.lng, currentCenter.lat]; // [longitude, latitude]
+        const end = [activeMarker.lng, activeMarker.lat]; // [longitude, latitude]
 
-        const multiRoute = new ymaps.multiRouter.MultiRoute(
-          {
-            referencePoints: [start, end],
-            params: {
-              routingMode: "auto"
-            }
-          },
-          {
-            routeStrokeColor: "#1e40af",
-            routeStrokeWidth: 5,
-            boundsAutoApply: true
-          }
-        );
+        const directions = new mapgl.Directions(mapInstance, {
+          directionsApiKey: "26c65059-f062-4a91-a973-b8a38fedf562"
+        });
 
-        multiRoute.model.events.add("requestsuccess", () => {
-          const activeRoute = multiRoute.getActiveRoute();
-          if (activeRoute) {
-            const distanceText = activeRoute.properties.get("distance").text;
-            const durationText = activeRoute.properties.get("duration").text;
+        directions.on("routingSuccess", (data: any) => {
+          const route = data.routes[0];
+          if (route) {
+            const lengthMeters = route.distance || route.length || 0;
+            const durationSeconds = route.duration || 0;
+            const distanceKm = (lengthMeters / 1000).toFixed(1);
+            const durationMin = Math.round(durationSeconds / 60);
             setRouteStats({
-              distance: distanceText,
-              duration: durationText
+              distance: `${distanceKm} км`,
+              duration: `${durationMin} мин`
             });
           }
         });
 
-        mapInstance.geoObjects.add(multiRoute);
-        activeRouteRef.current = multiRoute;
+        directions.on("routingError", (err: any) => {
+          console.error("2GIS Route build error:", err);
+          setRouteStats(null);
+        });
+
+        directions.carRoute({
+          points: [start, end]
+        });
+
+        activeRouteRef.current = directions;
       }
     } else {
       setRouteStats(null);
     }
-  }, [mapInstance, isRoutingActive, activeMarkerId, userLocation]);
+  }, [mapInstance, isRoutingActive, activeMarkerId, userLocation, mapglLoaded]);
 
   // Locate User action
   const locateUser = () => {
-    if (!mapInstance || !ymapsLoaded || !(window as any).ymaps) return;
+    if (!mapInstance || !mapglLoaded || !(window as any).mapgl) return;
     setLocatingUser(true);
 
-    const ymaps = (window as any).ymaps;
+    const mapgl = (window as any).mapgl;
 
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -240,26 +328,21 @@ export default function MapPlaceholder({
           setLocatingUser(false);
 
           // Center map
-          mapInstance.setCenter([coords.lat, coords.lng], 14);
+          mapInstance.setCenter([coords.lng, coords.lat]);
 
           // Draw user location marker
-          if (userPlacemarkRef.current) {
-            mapInstance.geoObjects.remove(userPlacemarkRef.current);
+          if (userMarkerRef.current) {
+            userMarkerRef.current.destroy();
           }
 
-          const userPm = new ymaps.Placemark(
-            [coords.lat, coords.lng],
-            {},
-            {
-              preset: "islands#circleDotIconWithCaption",
-              iconColor: "#1e40af"
-            }
-          );
-          mapInstance.geoObjects.add(userPm);
-          userPlacemarkRef.current = userPm;
+          userMarkerRef.current = new mapgl.Marker(mapInstance, {
+            type: "html",
+            coordinates: [coords.lng, coords.lat],
+            html: `<div class="w-4 h-4 rounded-full bg-blue-600 border-2 border-white shadow-lg animate-pulse"></div>`
+          });
         },
         (error) => {
-          console.warn("Geolocation failed:", error);
+          console.warn("2GIS Geolocation failed:", error);
           setLocatingUser(false);
         },
         { timeout: 8000 }
@@ -332,6 +415,55 @@ export default function MapPlaceholder({
         </button>
       </div>
 
+      {/* Premium Glassmorphic Clinic Details Panel (Bottom Panel) */}
+      {!isRoutingActive && activeMarker && (
+        <div className="absolute bottom-20 left-4 right-4 sm:right-auto sm:max-w-sm bg-white/95 backdrop-blur-md border border-slate-200/80 text-slate-800 rounded-3xl p-4 shadow-xl animate-fade-in z-10">
+          <div className="flex items-start gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center shadow-xs shrink-0 overflow-hidden">
+              <img src={getClinicLogoUrl(activeMarker.name)} style={{ width: "100%", height: "100%", objectFit: "contain", padding: "4px" }} />
+            </div>
+            <div className="flex-1 min-w-0 relative">
+              <button
+                onClick={() => onMarkerSelect(undefined as any)}
+                className="absolute -top-1 -right-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100/80 rounded-full transition cursor-pointer font-extrabold text-xs p-1.5 min-w-[28px] min-h-[28px] flex items-center justify-center"
+                title="Закрыть информацию"
+              >
+                ✕
+              </button>
+              <h4 className="text-sm font-black text-slate-950 leading-tight pr-6 tracking-tight">
+                {activeMarker.name}
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-1 font-medium leading-relaxed">{activeMarker.address}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex items-center gap-0.5 bg-amber-50 px-1.5 py-0.5 rounded-lg shrink-0">
+                  <span className="text-amber-500 text-xs">★</span>
+                  <span className="text-amber-800 text-[10px] font-black">{activeMarker.rating?.toFixed(1) || "4.5"}</span>
+                </div>
+                <span className="text-xs text-slate-400 font-mono">•</span>
+                <span className="text-xs font-black text-blue-600 font-mono">Анализ от {activeMarker.price.toLocaleString()} ₸</span>
+              </div>
+              
+              {/* Action Buttons: Route & Book */}
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={onStartRouting}
+                  className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm hover:shadow cursor-pointer"
+                >
+                  <Car className="w-3.5 h-3.5" />
+                  Маршрут
+                </button>
+                <button
+                  onClick={() => onBookClinic && onBookClinic(activeMarker.id)}
+                  className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm hover:shadow cursor-pointer"
+                >
+                  Запись
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Premium Glassmorphic Routing Stats Overlay (Bottom Panel) */}
       {isRoutingActive && activeMarker && (
         <div className="absolute bottom-20 left-4 right-4 sm:right-auto sm:max-w-sm bg-white/95 backdrop-blur-md border border-slate-200/80 text-slate-800 rounded-3xl p-4 shadow-xl animate-fade-in z-10">
@@ -383,6 +515,27 @@ export default function MapPlaceholder({
 }
 
 export const renderBrandLogo = (name: string, sizeClass = "w-8.5 h-8.5 rounded-xl") => {
+  const logoUrl = getClinicLogoUrl(name);
+  if (logoUrl) {
+    return (
+      <div className={`${sizeClass} bg-white border border-slate-100 flex items-center justify-center shadow-xs shrink-0 overflow-hidden`}>
+        <img 
+          src={logoUrl} 
+          alt={name} 
+          className="w-full h-full object-contain p-0.5" 
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+            const sibling = e.currentTarget.nextElementSibling as HTMLElement;
+            if (sibling) sibling.style.display = "flex";
+          }}
+        />
+        <div className="hidden w-full h-full items-center justify-center bg-blue-600 text-white font-black text-xs">
+          {getBrandLogoText(name)}
+        </div>
+      </div>
+    );
+  }
+
   const lower = name.toLowerCase();
   
   if (lower.includes("олимп") || lower.includes("olymp")) {

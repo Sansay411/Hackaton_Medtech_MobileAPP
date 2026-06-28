@@ -49,7 +49,7 @@ import {
   Brain,
   Smile
 } from "lucide-react";
-import { onAuthStateChanged, auth, signOut, db, collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, setDoc, handleFirestoreError, OperationType, deleteDoc } from "./lib/firebase";
+import { onAuthStateChanged, auth, signOut, db, collection, addDoc, getDocs, query, where, orderBy, doc, getDoc, setDoc, handleMongoDBError, OperationType, deleteDoc } from "./lib/dbBridge";
 import { Clinic, MapMarker, OnboardingState } from "./types";
 import Logo from "./components/Logo";
 import Onboarding from "./components/Onboarding";
@@ -286,6 +286,7 @@ export default function App() {
   const [selectedTariff, setSelectedTariff] = useState<"express" | "standard" | "premium">("standard");
   // Active route tracking state
   const [isRoutingActive, setIsRoutingActive] = useState(false);
+  const [blogArticles, setBlogArticles] = useState<any[]>([]);
 
   // Reset routing state if no active marker is present
   useEffect(() => {
@@ -378,7 +379,7 @@ export default function App() {
   const [showQuizSheet, setShowQuizSheet] = useState(false);
   const [showEventsSheet, setShowEventsSheet] = useState(false);
 
-  // History tracking from Firestore
+  // History tracking from MongoDB
   const [userHistory, setUserHistory] = useState<Array<{ id: string; query: string; city: string; timestamp: string; count: number }>>([]);
 
   useEffect(() => {
@@ -424,7 +425,7 @@ export default function App() {
     { id: "fam-2", name: "Карим Смагулов", relationship: "Сын", age: 12, iin: "120515543210" }
   ]);
 
-  // 2. Active Records & Appointments, loaded dynamically from Firebase Firestore (No synthetic data)
+  // 2. Active Records & Appointments, loaded dynamically from MongoDB MongoDB (No synthetic data)
   const [healthRecords, setHealthRecords] = useState<any[]>([]);
 
   // Booking process states (Production-grade sheet)
@@ -485,7 +486,7 @@ export default function App() {
         fetchSearchHistory(user.uid);
         fetchAppointments(user.uid);
         
-        // Try fetching phone and profile from Firestore
+        // Try fetching phone and profile from MongoDB
         try {
           const userDoc = await getDoc(doc(db, "users", user.uid));
           if (userDoc.exists()) {
@@ -511,7 +512,7 @@ export default function App() {
             }
           }
         } catch (e) {
-          console.warn("Failed to load user profile from Firestore, falling back to local storage:", e);
+          console.warn("Failed to load user profile from MongoDB, falling back to local storage:", e);
           const cachedProfile = localStorage.getItem(`medtariff_profile_${user.uid}`);
           if (cachedProfile) {
             try {
@@ -549,8 +550,8 @@ export default function App() {
       // Synchronize back to local storage cache for instant sub-sequent offline loads
       localStorage.setItem(`medtariff_history_${uid}`, JSON.stringify(historyItems));
     } catch (e) {
-      console.warn("Could not retrieve Firestore history, falling back to local storage:", e);
-      handleFirestoreError(e, OperationType.LIST, "searchHistory");
+      console.warn("Could not retrieve MongoDB history, falling back to local storage:", e);
+      handleMongoDBError(e, OperationType.LIST, "searchHistory");
       const localHist = localStorage.getItem(`medtariff_history_${uid}`);
       if (localHist) {
         try {
@@ -562,7 +563,7 @@ export default function App() {
     }
   };
 
-  // Fetch real appointments for logged-in user or guest from Firestore
+  // Fetch real appointments for logged-in user or guest from MongoDB
   const fetchAppointments = async (uid: string) => {
     try {
       const q = query(
@@ -578,8 +579,8 @@ export default function App() {
       setHealthRecords(appts);
       localStorage.setItem(`medtariff_appointments_${uid}`, JSON.stringify(appts));
     } catch (e) {
-      console.warn("Could not retrieve Firestore appointments, falling back to local storage:", e);
-      handleFirestoreError(e, OperationType.LIST, "appointments");
+      console.warn("Could not retrieve MongoDB appointments, falling back to local storage:", e);
+      handleMongoDBError(e, OperationType.LIST, "appointments");
       const localAppts = localStorage.getItem(`medtariff_appointments_${uid}`);
       if (localAppts) {
         try {
@@ -627,10 +628,10 @@ export default function App() {
   }, [autocompleteQuery]);
 
   // Lazy Write-Back: Saves parsed results to clinics & services collections in the background
-  const saveSearchDataToFirestore = async (queryText: string, searchCity: string, clinicsList: Clinic[]) => {
+  const saveSearchDataToMongoDB = async (queryText: string, searchCity: string, clinicsList: Clinic[]) => {
     if (!clinicsList || clinicsList.length === 0) return;
     try {
-      console.log("Lazy Write-Back: Starting background verification and synchronization with Firestore for:", queryText);
+      console.log("Lazy Write-Back: Starting background verification and synchronization with MongoDB for:", queryText);
       const prices = clinicsList.map(c => c.price);
       const minPrice = Math.min(...prices);
       const averagePrice = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
@@ -707,7 +708,7 @@ export default function App() {
         updatedAt: new Date().toISOString()
       };
       await setDoc(serviceRef, serviceDocData, { merge: true });
-      console.log("Lazy Write-Back: Successfully aggregated, validated and synchronized data to Firestore for:", queryText);
+      console.log("Lazy Write-Back: Successfully aggregated, validated and synchronized data to MongoDB for:", queryText);
     } catch (err) {
       console.warn("Lazy Write-Back background synchronization warning (graceful):", err);
     }
@@ -730,7 +731,7 @@ export default function App() {
   // Mode 2: Static Database Search (DB-Mode)
   const executeStaticDBSearch = async (queryText: string, searchCity: string) => {
     try {
-      console.log(`DB-Mode: Querying local Firestore database for: "${queryText}" in ${searchCity}`);
+      console.log(`DB-Mode: Querying local MongoDB database for: "${queryText}" in ${searchCity}`);
       const q = query(
         collection(db, "services"),
         where("city", "==", searchCity)
@@ -748,7 +749,7 @@ export default function App() {
       });
 
       if (matchedService) {
-        console.log("DB-Mode: Match found in Firestore:", matchedService.name);
+        console.log("DB-Mode: Match found in MongoDB:", matchedService.name);
         const clinicsSnapshot = await getDocs(query(collection(db, "clinics"), where("city", "==", searchCity)));
         const dbClinicsMap: Record<string, any> = {};
         clinicsSnapshot.forEach(docSnap => {
@@ -773,7 +774,7 @@ export default function App() {
 
         const enrichedClinics = enrichWithInflationAndTimestamp(clinicsList);
         setClinics(enrichedClinics);
-        setMarketInsights(`ИИ-Аналитика (БД-Режим): На основе исторических данных в Firestore, минимальная цена на "${matchedService.name}" в г. ${searchCity} составляет ${matchedService.minPrice.toLocaleString()} ₸, средняя — ${matchedService.averagePrice.toLocaleString()} ₸. Услуга привязана к государственному коду МЗ РК ${matchedService.code}.`);
+        setMarketInsights(`ИИ-Аналитика (БД-Режим): На основе исторических данных в MongoDB, минимальная цена на "${matchedService.name}" в г. ${searchCity} составляет ${matchedService.minPrice.toLocaleString()} ₸, средняя — ${matchedService.averagePrice.toLocaleString()} ₸. Услуга привязана к государственному коду МЗ РК ${matchedService.code}.`);
         setIsSimulatedMode(false);
 
         const getCityFallbackCoords = (city: string) => {
@@ -808,7 +809,7 @@ export default function App() {
       }
       return false;
     } catch (err) {
-      console.warn("DB-Mode: Error querying Firestore:", err);
+      console.warn("DB-Mode: Error querying MongoDB:", err);
       return false;
     }
   };
@@ -843,7 +844,7 @@ export default function App() {
     }
 
     // Lazy write-back triggered in background
-    saveSearchDataToFirestore(queryText, searchCity, fetchedClinics);
+    saveSearchDataToMongoDB(queryText, searchCity, fetchedClinics);
   };
 
   // Execute Search proxying server endpoints with Mode Selector
@@ -881,7 +882,7 @@ export default function App() {
         return [newItem, ...prev.slice(0, 5)];
       });
 
-      // Persist search request to Firestore under searches/searchHistory
+      // Persist search request to MongoDB under searches/searchHistory
       const uid = currentUserUid || "anonymous";
       const newHistoryItem = {
         id: "hist-" + Date.now(),
@@ -916,7 +917,7 @@ export default function App() {
           fetchSearchHistory(currentUserUid);
         }
       } catch (err) {
-        console.warn("Failed to write search history to Firestore, fallback is active:", err);
+        console.warn("Failed to write search history to MongoDB, fallback is active:", err);
       }
 
     } catch (e) {
@@ -1037,6 +1038,62 @@ export default function App() {
     }
   }, [sortBy, osmsFilter, clinics, activeMarkerId]);
 
+  const handleBookClinic = (clinicId: string) => {
+    const clinic = clinics.find(c => c.id === clinicId);
+    if (clinic) {
+      setSelectedClinic(clinic);
+      setBookingPatientName(userName !== "Гость" && userName !== "" ? userName : "");
+      setBookingPhone(onboarding.phone || "");
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(10, 0, 0, 0);
+      setBookingDate(tomorrow.toISOString().slice(0, 16));
+      setBookingDoctor(null);
+      setBookingSuccessData(null);
+      setShowBookingSheet(true);
+    }
+  };
+
+  const loadBlogArticles = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "blogs"));
+      const list: any[] = [];
+      querySnapshot.forEach((docItem: any) => {
+        list.push({ id: docItem.id, ...docItem.data() });
+      });
+      if (list.length > 0) {
+        setBlogArticles(list);
+      } else {
+        // Seed initial blog posts to MongoDB if empty
+        console.log("Seeding initial blog posts to MongoDB...");
+        for (const article of BLOG_ARTICLES) {
+          const { id, ...postData } = article;
+          await setDoc(doc(db, "blogs", article.id), {
+            ...postData,
+            summary: article.excerpt || "",
+            author: "MedTariff Редакция",
+            city: "Все"
+          });
+        }
+        // Re-load
+        const freshSnapshot = await getDocs(collection(db, "blogs"));
+        const freshList: any[] = [];
+        freshSnapshot.forEach((docItem: any) => {
+          freshList.push({ id: docItem.id, ...docItem.data() });
+        });
+        setBlogArticles(freshList);
+      }
+    } catch (e) {
+      console.error("Failed to load blog posts from MongoDB:", e);
+      // Fallback to static
+      setBlogArticles(BLOG_ARTICLES);
+    }
+  };
+
+  useEffect(() => {
+    loadBlogArticles();
+  }, [activeTab]);
+
   // Sort recent searches: pinned always at top
   const sortedRecentSearches = [...recentSearches].sort((a, b) => {
     if (a.isPinned && !b.isPinned) return -1;
@@ -1045,7 +1102,7 @@ export default function App() {
   });
 
   return (
-    <div className="h-screen h-[100dvh] bg-slate-50 flex flex-col relative overflow-hidden w-full max-w-md mx-auto shadow-xl border-x border-slate-200">
+    <div className="client-app h-screen h-[100dvh] bg-slate-50 flex flex-col relative overflow-hidden w-full max-w-md mx-auto shadow-xl border-x border-slate-200">
       
       {/* Onboarding Overlay state gate */}
       {!onboarding.isCompleted && (
@@ -1185,6 +1242,27 @@ export default function App() {
                     )}
                   </div>
 
+                  {/* Popular categories buttons */}
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                    {[
+                      { label: "Анализ крови", query: "Анализ крови" },
+                      { label: "МРТ", query: "МРТ" },
+                      { label: "УЗИ", query: "УЗИ" },
+                      { label: "Приём врача", query: "Приём врача" }
+                    ].map((cat) => (
+                      <button
+                        key={cat.label}
+                        onClick={() => {
+                          setAutocompleteQuery(cat.query);
+                          executeSearch(cat.query, onboarding.city);
+                        }}
+                        className="bg-white/10 hover:bg-white/20 text-white text-[10px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-full transition active:scale-95 border border-white/5 cursor-pointer"
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+
                   {/* Bottom details of header: compact List/Map switcher */}
                   <div className="flex items-center justify-center px-1.5 pt-0.5 gap-2 w-full">
                     {/* List/Map Switcher */}
@@ -1278,7 +1356,10 @@ export default function App() {
                 
                 {/* LIST VIEW */}
                 {viewMode === "list" && (
-                  <div className="flex-1 overflow-y-auto p-4 pb-28 space-y-4">
+                  <div 
+                    className="flex-1 overflow-y-auto p-4 space-y-4"
+                    style={{ paddingBottom: "calc(120px + env(safe-area-inset-bottom))" }}
+                  >
 
                      {/* Gorgeous Reference-styled Home Dashboard (Visible only when NOT searching) */}
                      {!searchQuery ? (
@@ -1620,8 +1701,10 @@ export default function App() {
                       activeMarkerId={activeMarkerId}
                       onMarkerSelect={(id) => setActiveMarkerId(id)}
                       city={onboarding.city}
-                      isRoutingActive={!!activeMarkerId}
-                      onCloseRouting={() => setActiveMarkerId(undefined)}
+                      isRoutingActive={isRoutingActive}
+                      onCloseRouting={() => setIsRoutingActive(false)}
+                      onStartRouting={() => setIsRoutingActive(true)}
+                      onBookClinic={handleBookClinic}
                     />
                   </div>
                 )}
@@ -1633,7 +1716,10 @@ export default function App() {
           {/* TAB 2: MEDICAL BLOG & NOMINEES (Блог)     */}
           {/* ========================================== */}
           {activeTab === "blog" && (
-            <div className="flex-1 flex flex-col overflow-y-auto p-4 pb-28 space-y-5 bg-slate-50/50">
+            <div 
+              className="flex-1 flex flex-col overflow-y-auto p-4 space-y-5 bg-slate-50/50"
+              style={{ paddingBottom: "calc(120px + env(safe-area-inset-bottom))" }}
+            >
               {selectedBlogArticle ? (
                 /* Full article detail view with Cover Photo */
                 <div className="bg-white rounded-[2.2rem] p-6 border border-slate-100 shadow-xs space-y-4 text-left animate-fade-in">
@@ -1713,7 +1799,7 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-1 gap-4">
-                        {BLOG_ARTICLES.filter(
+                        {blogArticles.filter(
                           art => selectedCat === "Все" || art.category === selectedCat
                         ).map((article) => {
                           const tagColor = 
@@ -1792,7 +1878,10 @@ export default function App() {
           {/* TAB 3: CLINIC COMPARISONS (Сравнение)       */}
           {/* ========================================== */}
           {activeTab === "compare" && (
-            <div className="flex-1 flex flex-col overflow-y-auto p-4 pb-28 space-y-4">
+            <div 
+              className="flex-1 flex flex-col overflow-y-auto p-4 space-y-4"
+              style={{ paddingBottom: "calc(120px + env(safe-area-inset-bottom))" }}
+            >
               
               <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-blue-100 rounded-lg text-blue-700">
@@ -1863,7 +1952,10 @@ export default function App() {
           {/* TAB 4: USER PROFILE & SETTINGS (Профиль)   */}
           {/* ========================================== */}
           {activeTab === "profile" && (
-            <div className="flex-1 flex flex-col overflow-y-auto p-4 pb-32 space-y-4 relative bg-slate-50/50">
+            <div 
+              className="flex-1 flex flex-col overflow-y-auto p-4 space-y-4 relative bg-slate-50/50"
+              style={{ paddingBottom: "calc(120px + env(safe-area-inset-bottom))" }}
+            >
               
               {/* Screen 4 Header */}
               <div className="flex items-center justify-between py-1 shrink-0">
@@ -2045,6 +2137,23 @@ export default function App() {
                         </div>
                       </div>
                       <ChevronRight className="w-4 h-4 text-blue-500" />
+                    </button>
+
+                    {/* Option 7: Technical Part / Admin Hub */}
+                    <button
+                      onClick={() => window.open("/admin", "_blank")}
+                      className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-slate-50 transition cursor-pointer active:scale-[0.99]"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                          <Database className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-extrabold text-amber-700 block">Техническая часть (Админка)</span>
+                          <span className="text-[9px] text-slate-400 block mt-0.5">Управление парсером, логами и нормализацией</span>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-amber-500" />
                     </button>
                   </div>
 
@@ -2580,6 +2689,26 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* List of matched services of this clinic */}
+                {(selectedClinic as any).services && (selectedClinic as any).services.length > 0 && (
+                  <div className="space-y-2 pt-3 border-t border-slate-100 text-left">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                      Найденные услуги в этой клинике ({(selectedClinic as any).services.length})
+                    </span>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                      {(selectedClinic as any).services.map((svc: any, idx: number) => (
+                        <div key={idx} className="flex justify-between items-center bg-slate-50 border border-slate-100/60 p-2 rounded-xl text-xs font-semibold">
+                          <div className="flex flex-col min-w-0 leading-tight">
+                            <span className="text-slate-800 font-extrabold truncate text-[11px]">{svc.serviceNameRaw}</span>
+                            {svc.serviceNameNorm && <span className="text-[8.5px] text-slate-450 font-medium">({svc.serviceNameNorm})</span>}
+                          </div>
+                          <span className="text-blue-700 font-black shrink-0 ml-3 font-mono text-[11px]">{svc.priceKzt.toLocaleString()} ₸</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* TARIFF / PRICE PACKAGES - Screen 6 / 8 details layout replica with horizontal selectors */}
                 <div className="space-y-3.5 pt-3 border-t border-slate-100">
                   <div className="flex items-center justify-between">
@@ -2761,10 +2890,10 @@ export default function App() {
           )}
 
           {/* ========================================================== */}
-          {/* SLIDE-UP SHEET: BOOKING APPOINTMENT FORM (Firestore Write) */}
+          {/* SLIDE-UP SHEET: BOOKING APPOINTMENT FORM (MongoDB Write) */}
           {/* ========================================================== */}
           {showBookingSheet && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex flex-col justify-end">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex flex-col justify-end">
               <div className="fixed inset-0" onClick={() => setShowBookingSheet(false)} />
               <div className="bg-white w-full rounded-t-[32px] max-h-[90vh] overflow-hidden flex flex-col relative z-10 animate-slide-up shadow-2xl border-t border-slate-100 select-none">
                 {/* Header */}
@@ -2798,7 +2927,7 @@ export default function App() {
                       </div>
                       <div className="space-y-1">
                         <h4 className="font-black text-slate-800 text-base">Вы успешно записаны!</h4>
-                        <p className="text-xs text-slate-500 font-medium">Ваша запись внесена в государственную систему и сохранена в Firestore.</p>
+                        <p className="text-xs text-slate-500 font-medium">Ваша запись внесена в государственную систему и сохранена в MongoDB.</p>
                       </div>
 
                       <div className="bg-slate-50 border border-slate-150 p-4 rounded-2xl space-y-2.5 text-left font-mono text-[10.5px] text-slate-700">
@@ -2873,7 +3002,7 @@ export default function App() {
                             createdAt: new Date().toISOString()
                           };
 
-                          // Write directly to Firebase Firestore collections
+                          // Write directly to MongoDB MongoDB collections
                           await addDoc(collection(db, "appointments"), ticketData);
                           
                           // Trigger silent refetch
@@ -2974,7 +3103,7 @@ export default function App() {
                         className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98]"
                       >
                         <Check className="w-4 h-4" />
-                        {isBookingSubmitting ? "Отправка в Firestore..." : "Подтвердить запись"}
+                        {isBookingSubmitting ? "Отправка в MongoDB..." : "Подтвердить запись"}
                       </button>
                     </form>
                   )}
@@ -3043,7 +3172,7 @@ export default function App() {
                   ) : (
                     /* List of articles */
                     <div className="space-y-3.5 text-left">
-                      {BLOG_ARTICLES.map((article) => (
+                      {blogArticles.map((article) => (
                         <div
                           key={article.id}
                           onClick={() => setSelectedBlogArticle(article)}
@@ -3766,9 +3895,10 @@ export default function App() {
         </div>
 
         {/* ========================================== */}
-        {/* BOTTOM NAV BAR (Menu bar)                  */}
-        {/* ========================================== */}
-        <div className="absolute bottom-4 left-0 right-0 px-2 z-40 select-none pointer-events-none">
+        <div 
+          className="absolute left-0 right-0 px-2 z-40 select-none pointer-events-none"
+          style={{ bottom: "calc(16px + env(safe-area-inset-bottom))" }}
+        >
           <div className="bg-white/85 backdrop-blur-lg border border-slate-200/50 shadow-lg px-4 py-2 rounded-full flex justify-between items-center pointer-events-auto max-w-[380px] mx-auto gap-0.5">
             
             {/* Tab 1: Поиск / Главная */}
@@ -3808,7 +3938,16 @@ export default function App() {
               )}
             </button>
 
-
+            {/* Tab 3: Техническая часть (Админ) */}
+            <button
+              onClick={() => {
+                window.open("/admin", "_blank");
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer text-slate-400 hover:text-slate-600 relative"
+            >
+              <Database className="w-4.5 h-4.5 shrink-0" />
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            </button>
 
             {/* Tab 4: Блог */}
             <button

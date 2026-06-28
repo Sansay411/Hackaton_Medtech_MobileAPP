@@ -88,7 +88,15 @@ export default function ClinicCard({
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-3 min-w-0">
             {/* Beautiful brand logo */}
-            {renderBrandLogo(clinic.name, "w-10 h-10 rounded-2xl")}
+            {clinic.logoUrl ? (
+              <div className="w-10 h-10 rounded-2xl bg-white border border-slate-100 flex items-center justify-center shadow-xs shrink-0 overflow-hidden">
+                <img 
+                  src={clinic.logoUrl} 
+                  alt={clinic.name} 
+                  className="w-full h-full object-contain p-0.5" 
+                />
+              </div>
+            ) : null}
             
             <div className="min-w-0">
               {/* Bold Service Naming */}
@@ -96,7 +104,7 @@ export default function ClinicCard({
                 {serviceQuery || "Медицинская услуга"}
               </span>
               {/* Clinic Brand Label */}
-              <h4 className="font-sans font-black text-slate-800 text-sm group-hover:text-indigo-900 transition-colors truncate">
+              <h4 className="font-sans font-black text-slate-800 text-sm group-hover:text-indigo-900 transition-colors leading-tight">
                 {clinic.name}
               </h4>
             </div>

@@ -1,0 +1,194 @@
+/** Central registry of all clinic sources to parse. */
+
+import { SourceConfig } from "./types";
+
+export const PARSER_SOURCES: SourceConfig[] = [
+  {
+    id: "kdl-olymp-almaty",
+    name: "КДЛ Олимп (Алматы)",
+    providerClass: "KdlProvider",
+    url: "https://kdlolymp.kz",
+    city: "Алматы",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "kdl-olymp-astana",
+    name: "КДЛ Олимп (Астана)",
+    providerClass: "KdlProvider",
+    url: "https://kdlolymp.kz/astana",
+    city: "Астана",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "kdl-olymp-shymkent",
+    name: "КДЛ Олимп (Шымкент)",
+    providerClass: "KdlProvider",
+    url: "https://kdlolymp.kz/shymkent",
+    city: "Шымкент",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "invitro-almaty",
+    name: "Инвитро (Алматы)",
+    providerClass: "InvitroProvider",
+    url: "https://invitro.kz",
+    city: "Алматы",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "invitro-astana",
+    name: "Инвитро (Астана)",
+    providerClass: "InvitroProvider",
+    url: "https://invitro.kz/astana",
+    city: "Астана",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "invitro-karaganda",
+    name: "Инвитро (Караганда)",
+    providerClass: "InvitroProvider",
+    url: "https://invitro.kz/analizes/for-doctors/karaganda/",
+    city: "Караганда",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "invitro-shymkent",
+    name: "Инвитро (Шымкент)",
+    providerClass: "InvitroProvider",
+    url: "https://invitro.kz/analizes/for-doctors/shymkent/",
+    city: "Шымкент",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "helix-almaty",
+    name: "Helix (Алматы)",
+    providerClass: "HelixProvider",
+    url: "https://helix.kz",
+    city: "Алматы",
+    format: "html",
+    isActive: false, // SSL certificate error
+  },
+  {
+    id: "olymp-almaty",
+    name: "Olymp (Алматы)",
+    providerClass: "OlympProvider",
+    url: "https://olymp.kz",
+    city: "Алматы",
+    format: "html",
+    isActive: false, // timeout / unreachable
+  },
+  {
+    id: "doq-kz",
+    name: "DoQ.kz",
+    providerClass: "DoqProvider",
+    url: "https://doq.kz",
+    city: "Алматы",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "medel-almaty",
+    name: "МЕДЭЛ (Алматы)",
+    providerClass: "MedelProvider",
+    url: "https://medel.kz",
+    city: "Алматы",
+    format: "html",
+    isActive: false, // SSL certificate error
+  },
+  {
+    id: "aksai-clinic",
+    name: "Аксайская клиника",
+    providerClass: "AksaiClinicProvider",
+    url: "https://aksai-clinic.kz",
+    city: "Алматы",
+    format: "html",
+    isActive: false, // DNS not resolving
+  },
+  {
+    id: "mck-kz",
+    name: "МЦК",
+    providerClass: "MckProvider",
+    url: "https://mck.kz",
+    city: "Алматы",
+    format: "html",
+    isActive: false, // domain for sale
+  },
+  {
+    id: "topdoc-almaty-laboratories",
+    name: "TopDoc.kz (Лаборатории)",
+    providerClass: "TopdocProvider",
+    url: "https://www.topdoc.kz/almaty/laboratories/",
+    city: "Алматы",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "topdoc-almaty-clinics",
+    name: "TopDoc.kz (Клиники)",
+    providerClass: "TopdocProvider",
+    url: "https://www.topdoc.kz/almaty/clinics/",
+    city: "Алматы",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "topdoc-astana-laboratories",
+    name: "TopDoc.kz (Лаборатории Астана)",
+    providerClass: "TopdocProvider",
+    url: "https://www.topdoc.kz/astana/laboratories/",
+    city: "Астана",
+    format: "html",
+    isActive: true,
+  },
+  {
+    id: "dgis-almaty",
+    name: "2GIS (Алматы)",
+    providerClass: "DgisProvider",
+    url: "",
+    city: "Алматы",
+    format: "json-api",
+    isActive: true,
+  },
+  {
+    id: "dgis-astana",
+    name: "2GIS (Астана)",
+    providerClass: "DgisProvider",
+    url: "",
+    city: "Астана",
+    format: "json-api",
+    isActive: true,
+  },
+  {
+    id: "dgis-karaganda",
+    name: "2GIS (Караганда)",
+    providerClass: "DgisProvider",
+    url: "",
+    city: "Караганда",
+    format: "json-api",
+    isActive: true,
+  },
+  {
+    id: "dgis-shymkent",
+    name: "2GIS (Шымкент)",
+    providerClass: "DgisProvider",
+    url: "",
+    city: "Шымкент",
+    format: "json-api",
+    isActive: true,
+  },
+];
+
+export function getSource(sourceId: string): SourceConfig | undefined {
+  return PARSER_SOURCES.find((s) => s.id === sourceId);
+}
+
+export function getActiveSources(): SourceConfig[] {
+  return PARSER_SOURCES.filter((s) => s.isActive);
+}

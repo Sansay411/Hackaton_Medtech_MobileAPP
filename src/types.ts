@@ -11,6 +11,8 @@ export interface Clinic {
   rating: number;
   anomalous_inflation?: boolean;
   parsedAt?: string;
+  logoUrl?: string;
+  services?: any[];
 }
 
 export interface MapMarker {
@@ -22,6 +24,7 @@ export interface MapMarker {
   address: string;
   osms: boolean;
   rating?: number;
+  logoUrl?: string;
 }
 
 export interface OnboardingState {

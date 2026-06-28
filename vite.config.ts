@@ -23,10 +23,10 @@ export default defineConfig(() => {
       },
     },
     server: {
-      allowedHosts: true,
-      hmr: process.env.DISABLE_HMR !== 'true',
+      allowedHosts: true as any,
+      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {
-        ignored: ['**/.claude/**', '**/node_modules/**']
+        ignored: ['**/data/**', '**/.claude/**', '**/node_modules/**']
       },
     },
   };

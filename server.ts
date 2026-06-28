@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
@@ -7,6 +8,9 @@ import XLSX from "xlsx";
 import mammoth from "mammoth";
 import https from "https";
 import { createRequire } from "module";
+import cron from "node-cron";
+import axios from "axios";
+import * as cheerio from "cheerio";
 
 const require = createRequire(import.meta.url);
 const pdf = require("pdf-parse");
@@ -533,6 +537,81 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
+  // Initialize MongoDB Connection
+  try {
+    const { connectToDatabase } = await import("./src/lib/mongodb");
+    await connectToDatabase();
+  } catch (err: any) {
+    console.error("[MongoDB Startup] Failed to connect on server start:", err.message);
+  }
+
+  // --- CLIENT DATABASE BRIDGE ENDPOINTS FOR MONGODB ---
+  app.get("/api/db/:collection", async (req, res) => {
+    try {
+      const { collection } = req.params;
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+      
+      const query: any = {};
+      for (const [key, val] of Object.entries(req.query)) {
+        if (key === "city") {
+          query.city = val;
+        } else if (key === "userId") {
+          query.userId = val;
+        } else if (key === "id") {
+          query.id = val;
+        } else {
+          query[key] = val;
+        }
+      }
+      
+      const list = await db.collection(collection).find(query).toArray();
+      const mappedList = list.map(item => {
+        const { _id, ...rest } = item;
+        return { id: item.id || String(_id), ...rest };
+      });
+      res.json(mappedList);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/db/:collection", async (req, res) => {
+    try {
+      const { collection } = req.params;
+      const data = req.body;
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+      
+      const id = data.id || String(Date.now() + Math.random().toString().slice(2, 6));
+      const payload = { ...data, id };
+      delete payload._id;
+
+      await db.collection(collection).updateOne(
+        { id },
+        { $set: payload },
+        { upsert: true }
+      );
+      res.json({ success: true, id });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/db/:collection/:id", async (req, res) => {
+    try {
+      const { collection, id } = req.params;
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+      
+      await db.collection(collection).deleteOne({ id });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // Initialize GoogleGenAI client lazily & safely to prevent startup crash if GEMINI_API_KEY is missing
   let ai: GoogleGenAI | null = null;
@@ -608,6 +687,46 @@ async function startServer() {
     return null;
   };
 
+  const CITY_CENTERS: Record<string, { lat: number; lng: number }> = {
+    "алматы": { lat: 43.238, lng: 76.889 },
+    "астана": { lat: 51.169, lng: 71.449 },
+    "шымкент": { lat: 42.341, lng: 69.590 },
+    "караганда": { lat: 49.802, lng: 73.088 },
+    "актобе": { lat: 50.283, lng: 57.926 },
+    "павлодар": { lat: 52.287, lng: 76.931 }
+  };
+
+  function getDistanceStr(lat?: number, lng?: number, city?: string): string {
+    if (!lat || !lng || !city) return "";
+    const center = CITY_CENTERS[city.toLowerCase().trim()];
+    if (!center) return "";
+    const R = 6371; // km
+    const dLat = (lat - center.lat) * Math.PI / 180;
+    const dLon = (lng - center.lng) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(center.lat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const d = R * c;
+    return d.toFixed(1) + " км";
+  }
+
+  function getUpdatedStr(parsedAtStr?: string): string {
+    if (!parsedAtStr) return "сегодня";
+    try {
+      const parsedDate = new Date(parsedAtStr);
+      const now = new Date();
+      const diffMs = now.getTime() - parsedDate.getTime();
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      if (diffDays === 0) return "сегодня";
+      if (diffDays === 1) return "вчера";
+      return parsedDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+    } catch {
+      return "сегодня";
+    }
+  }
+
   // API Route: AI-powered medical services search with googleSearch grounding
   app.post("/api/search-services", async (req, res) => {
     try {
@@ -616,64 +735,106 @@ async function startServer() {
         return res.json({ error: "Search query is required" });
       }
 
-      const client = getAI();
-      if (!client) {
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+
+      // Split query into keywords
+      const rawWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const words = rawWords.filter((w: string) => w.length >= 2);
+      const searchWords = words.length > 0 ? words : rawWords;
+
+      let filter: any = { city: { $regex: new RegExp(`^${city}$`, "i") } };
+      if (searchWords.length > 0) {
+        filter.$or = searchWords.map((w: string) => ({
+          $or: [
+            { serviceNameRaw: { $regex: w, $options: "i" } },
+            { serviceNameNorm: { $regex: w, $options: "i" } }
+          ]
+        })).flat();
+      }
+
+      const rawItems = await db.collection("rawTariffs").find(filter).toArray();
+      if (rawItems.length === 0) {
         return res.json(getSimulatedServices(query, city));
       }
 
-      const prompt = `Вы являетесь ведущим экспертом по медицинским тарифам и ценам в Казахстане. Используйте функцию Google Поиска (Google Search Grounding), чтобы найти реальные, актуальные цены и предложения на медицинскую услугу: "${query}" в городе: "${city}".
-Ищите информацию на официальных сайтах крупных сетей лабораторий и клиник в Казахстане (например, КДЛ Олимп (dily.olympkdl.kz), Инвиво/Invivo, Сункар, Orhun Medical, МЦ ХАК, Керуен Медикус, Евразия) или медицинских порталах-агрегаторах (таких как TopDoc.kz, Doc.kz).
-
-Предоставьте результат в формате JSON, содержащий:
-1. "insights": Краткий профессиональный ИИ-анализ рынка цен на услугу "${query}" в г. ${city}. Укажите среднюю реальную стоимость, ценовой диапазон, факторы влияния на цену и возможность получения услуги бесплатно по системе ОСМС (Обязательное Социальное Медицинское Страхование) в государственных или частных клиниках-поставщиках ФСМС.
-2. "clinics": Массив из 4-5 РЕАЛЬНО существующих в г. ${city} клиник или лабораторий, предлагающих эту услугу, с реальными или максимально близкими к действительности тарифами в тенге (₸):
-   - "id": Уникальная строка-идентификатор (например, "clinic-olymp-1")
-   - "name": Официальное название клиники или лаборатории (например, "КДЛ Олимп", "Медицинский центр Сункар", "Orhun Medical")
-   - "price": Реальная числовая цена за эту услугу в тенге (₸) на текущий момент (например, 2800)
-   - "address": Реальный физический адрес филиала этой клиники в городе ${city}
-   - "district": Название района города, где расположена клиника
-   - "distance": Расстояние от центра города (например, "1.8 км")
-   - "osms": Логическое значение (true, если эта услуга в данной клинике доступна бесплатно гражданам РК по системе ОСМС/ГОБМП, либо если это государственная поликлиника; false в противном случае)
-   - "updated": Строка "сегодня" или "вчера" (показывает актуальность тарифа)
-   - "phone": Действующий контактный телефон клиники/филиала в Казахстане
-   - "rating": Реальный или экспертный рейтинг клиники от 3.5 до 5.0 (число)
-
-Убедитесь, что ответ является СТРОГИМ JSON объектом и может быть распарсен. Не используйте разметку markdown типа \`\`\`json. Верните только валидный JSON.`;
-
-      const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json"
+      // Group rawItems by clinicName
+      const groupedMap = new Map<string, any[]>();
+      for (const item of rawItems) {
+        const key = item.clinicName.trim();
+        if (!groupedMap.has(key)) {
+          groupedMap.set(key, []);
         }
-      });
+        groupedMap.get(key)!.push(item);
+      }
 
-      const text = response.text || "";
+      // Fetch clinic logos
+      const logoMap = new Map<string, string>();
       try {
-        const parsed = cleanAndParseJSON(text);
-        parsed.isSimulated = false;
-
-        // Ground coordinates and address using Yandex Search API
-        if (parsed.clinics && Array.isArray(parsed.clinics)) {
-          for (const clinic of parsed.clinics) {
-            const yandexData = await getYandexClinicData(clinic.name, city);
-            if (yandexData) {
-              clinic.lat = yandexData.lat;
-              clinic.lng = yandexData.lng;
-              clinic.address = yandexData.address;
-              if (yandexData.phone) clinic.phone = yandexData.phone;
-            }
+        const logos = await db.collection("clinicLogos").find({}).toArray();
+        for (const logo of logos) {
+          if (logo.name && logo.logoUrl) {
+            logoMap.set(logo.name.toLowerCase().trim(), logo.logoUrl);
           }
         }
-
-        return res.json(parsed);
-      } catch (err) {
-        console.warn("Gemini response is not a clean JSON, falling back to simulated high-fidelity data.", text, err);
-        return res.json(getSimulatedServices(query, city));
+        const clinicsColl = await db.collection("clinics").find({}).toArray();
+        for (const cl of clinicsColl) {
+          if (cl.name && cl.logoUrl) {
+            logoMap.set(cl.name.toLowerCase().trim(), cl.logoUrl);
+          }
+        }
+      } catch (logoErr) {
+        console.warn("Failed to fetch logos:", logoErr);
       }
+
+      const clinicsList: any[] = [];
+      let idx = 0;
+      for (const [clinicName, items] of groupedMap.entries()) {
+        idx++;
+        const firstItem = items[0];
+        const prices = items.map(item => item.priceKzt).filter(p => typeof p === 'number');
+        const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+        const osms = items.some(item => item.osmsEligible);
+        const logoUrl = logoMap.get(clinicName.toLowerCase().trim()) || "";
+
+        clinicsList.push({
+          id: firstItem.clinicId || `clinic-${idx}-${clinicName.toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")}`,
+          name: clinicName,
+          price: minPrice,
+          address: firstItem.address || "Адрес не указан",
+          district: "", 
+          distance: getDistanceStr(firstItem.lat, firstItem.lng, city),
+          osms,
+          updated: getUpdatedStr(firstItem.parsedAt),
+          phone: firstItem.phone || "Телефон не указан",
+          rating: 4.5,
+          lat: firstItem.lat,
+          lng: firstItem.lng,
+          logoUrl,
+          services: items.map(it => ({
+            serviceNameRaw: it.serviceNameRaw,
+            serviceNameNorm: it.serviceNameNorm,
+            priceKzt: it.priceKzt,
+            osmsEligible: it.osmsEligible
+          }))
+        });
+      }
+
+      const prices = rawItems.map(item => item.priceKzt).filter(Boolean);
+      const minP = prices.length > 0 ? Math.min(...prices) : 0;
+      const maxP = prices.length > 0 ? Math.max(...prices) : 0;
+      const avgP = prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 0;
+      const osmsCount = rawItems.filter(item => item.osmsEligible).length;
+
+      const insights = `По вашему запросу "${query}" в г. ${city} найдено ${rawItems.length} тарифов. Стоимость варьируется от ${minP.toLocaleString()} ₸ до ${maxP.toLocaleString()} ₸ (средняя цена: ${avgP.toLocaleString()} ₸). Доступно ${osmsCount} вариантов с поддержкой ОСМС.`;
+
+      return res.json({
+        insights,
+        clinics: clinicsList,
+        isSimulated: false
+      });
     } catch (error) {
-      console.error("Gemini Search API failed:", error);
+      console.error("Search API failed:", error);
       return res.json(getSimulatedServices(req.body.query, req.body.city || "Алматы"));
     }
   });
@@ -682,295 +843,163 @@ async function startServer() {
   app.post("/api/map-grounding", async (req, res) => {
     try {
       const { query, city = "Алматы" } = req.body;
-      const client = getAI();
-      if (!client) {
+      if (!query || query.trim() === "") {
+        return res.json({ markers: [] });
+      }
+
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+
+      // Split query into keywords
+      const rawWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const words = rawWords.filter((w: string) => w.length >= 2);
+      const searchWords = words.length > 0 ? words : rawWords;
+
+      let filter: any = { city: { $regex: new RegExp(`^${city}$`, "i") } };
+      if (searchWords.length > 0) {
+        filter.$or = searchWords.map((w: string) => ({
+          $or: [
+            { serviceNameRaw: { $regex: w, $options: "i" } },
+            { serviceNameNorm: { $regex: w, $options: "i" } }
+          ]
+        })).flat();
+      }
+
+      const rawItems = await db.collection("rawTariffs").find(filter).toArray();
+      if (rawItems.length === 0) {
         return res.json(getSimulatedMapMarkers(query, city));
       }
 
-      const prompt = `Используйте Google Поиск (Google Search Grounding), чтобы найти реальные клиники и их филиалы в городе ${city} (Казахстан), которые оказывают медицинскую услугу "${query}".
-Предоставьте список из 5 реальных географических маркеров для этих клиник в формате JSON, содержащий объект "markers" с массивом элементов:
-- "id": Уникальный идентификатор клиники (например, "marker-invivo-1")
-- "name": Официальное название клиники или лаборатории (например, "Инвиво", "КДЛ Олимп", "Сункар")
-- "price": Реальная актуальная цена за эту услугу в тенге (число, например, 3000)
-- "lat": Точная или близкая к действительности широта филиала в г. ${city} (число, например, около 43.238 для Алматы, 51.169 для Астаны, 42.321 для Шымкента, 49.802 для Караганды)
-- "lng": Точная или близкая к действительности долгота филиала в г. ${city} (число, например, около 76.889 для Алматы, 71.449 для Астаны, 69.590 для Шымкента, 73.085 для Караганды)
-- "address": Реальный адрес филиала в г. ${city}
-- "osms": Логическое значение (true, если услуга в этой клинике доступна бесплатно по системе ОСМС)
-- "rating": Числовой рейтинг клиники от 3.5 до 5.0 (например, 4.8)
-
-Верните СТРОГИЙ JSON без разметки markdown. Убедитесь, что координаты соответствуют реальному расположению клиник в городе ${city}, чтобы они корректно отображались на интерактивной карте.`;
-
-      const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json"
+      // Group locations by clinicName
+      const groupedMap = new Map<string, any[]>();
+      for (const item of rawItems) {
+        const key = item.clinicName.trim();
+        if (!groupedMap.has(key)) {
+          groupedMap.set(key, []);
         }
-      });
+        groupedMap.get(key)!.push(item);
+      }
 
-      const text = response.text || "";
+      // Fetch clinic logos
+      const logoMap = new Map<string, string>();
       try {
-        const parsed = cleanAndParseJSON(text);
-        parsed.isSimulated = false;
-
-        // Ground coordinates and address using Yandex Search API
-        if (parsed.markers && Array.isArray(parsed.markers)) {
-          for (const marker of parsed.markers) {
-            const yandexData = await getYandexClinicData(marker.name, city);
-            if (yandexData) {
-              marker.lat = yandexData.lat;
-              marker.lng = yandexData.lng;
-              marker.address = yandexData.address;
-            }
+        const logos = await db.collection("clinicLogos").find({}).toArray();
+        for (const logo of logos) {
+          if (logo.name && logo.logoUrl) {
+            logoMap.set(logo.name.toLowerCase().trim(), logo.logoUrl);
           }
         }
-
-        return res.json(parsed);
-      } catch (err) {
-        console.warn("Gemini map-grounding response is not a clean JSON, falling back to simulated high-fidelity data.", text, err);
-        return res.json(getSimulatedMapMarkers(query, city));
+        const clinicsColl = await db.collection("clinics").find({}).toArray();
+        for (const cl of clinicsColl) {
+          if (cl.name && cl.logoUrl) {
+            logoMap.set(cl.name.toLowerCase().trim(), cl.logoUrl);
+          }
+        }
+      } catch (logoErr) {
+        console.warn("Failed to fetch logos:", logoErr);
       }
+
+      const markersList: any[] = [];
+      let idx = 0;
+      const cityCenter = CITY_CENTERS[city.toLowerCase().trim()] || CITY_CENTERS["алматы"];
+
+      for (const [clinicName, items] of groupedMap.entries()) {
+        idx++;
+        const firstItem = items[0];
+        const prices = items.map(item => item.priceKzt).filter(p => typeof p === 'number');
+        const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+        const osms = items.some(item => item.osmsEligible);
+        const logoUrl = logoMap.get(clinicName.toLowerCase().trim()) || "";
+
+        markersList.push({
+          id: firstItem.clinicId || `marker-${idx}-${clinicName.toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")}`,
+          name: clinicName,
+          price: minPrice,
+          lat: firstItem.lat || cityCenter.lat,
+          lng: firstItem.lng || cityCenter.lng,
+          address: firstItem.address || "Адрес не указан",
+          osms,
+          rating: 4.5,
+          logoUrl
+        });
+      }
+
+      return res.json({
+        markers: markersList,
+        isSimulated: false
+      });
     } catch (error) {
-      console.error("Gemini Map Grounding failed:", error);
+      console.error("Map Grounding failed:", error);
       return res.json(getSimulatedMapMarkers(req.body.query, req.body.city || "Алматы"));
     }
   });
 
   // ========================================================================
-  // API Route: Run clinic price parser using Gemini AI with Google Search grounding
-  // ========================================================================
-  app.post("/api/run-parser", async (req, res) => {
-    const { city = "Алматы", sources = [] } = req.body;
-    
-    // Define default sources if none provided
-    const defaultSources = [
-      { id: "kdlolymp", domain: "kdlolymp.kz", name: "КДЛ Олимп" },
-      { id: "invitro", domain: "invitro.kz", name: "Инвитро" },
-      { id: "doq", domain: "doq.kz", name: "DOQ.kz" },
-      { id: "helix", domain: "helix.kz", name: "Helix" },
-      { id: "olymp", domain: "olymp.kz", name: "Olymp" },
-      { id: "orhun", domain: "orhun.kz", name: "Orhun Medical" },
-      { id: "medel", domain: "medel.kz", name: "Медель" }
-    ];
-
-    let activeSources = defaultSources;
-    if (sources && sources.length > 0) {
-      if (typeof sources[0] === "object") {
-        activeSources = sources;
-      } else {
-        activeSources = defaultSources.filter((s: any) => sources.includes(s.id));
-      }
-    }
-
+  // =====================================================
+  // API Route: Run parser for ALL active sources (KDL, Invitro, TopDoc, 2GIS, etc.)
+  // =====================================================
+  app.post("/api/run-parser", async (_req, res) => {
     const logs: string[] = [];
-    const parsedItems: any[] = [];
+    const items: any[] = [];
     const errorLogs: any[] = [];
-    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
 
-    logs.push(`[ИНИЦИАЛИЗАЦИЯ] Запуск распределённого парсера MedServicePrice. Город: ${city}`);
-    logs.push(`[СИСТЕМА] Активных источников: ${activeSources.length}. Время запуска: ${nowStr}`);
-
-    const apiKey = process.env.GEMINI_API_KEY || "";
-    if (!apiKey || apiKey.includes("YOUR_API_KEY")) {
-      // Fallback: generate realistic mock data if no API key
-      logs.push("[ПРЕДУПРЕЖДЕНИЕ] GEMINI_API_KEY не настроен. Используется локальная база данных.");
-      
-      const mockServices = [
-        { source: "kdlolymp.kz", items: [
-          { rawName: "Общий анализ крови (ОАК) с лейкоцитарной формулой + СОЭ", price: 2250, category: "лаборатория" },
-          { rawName: "Биохимический анализ крови (12 показателей)", price: 5200, category: "лаборатория" },
-          { rawName: "ТТГ ультрачувствительный тест 3-го поколения", price: 2600, category: "лаборатория" },
-          { rawName: "Гликированный гемоглобин (HbA1c)", price: 3400, category: "лаборатория" },
-          { rawName: "Ферритин сывороточный", price: 3100, category: "лаборатория" },
-        ]},
-        { source: "invitro.kz", items: [
-          { rawName: "Общий анализ мочи с микроскопией осадка", price: 1400, category: "лаборатория" },
-          { rawName: "ПЦР тест COVID-19 (мазок из носоглотки)", price: 6500, category: "лаборатория" },
-          { rawName: "Определение уровня глюкозы в сыворотке крови", price: 900, category: "лаборатория" },
-          { rawName: "Витамин D (25-OH) количественный", price: 8900, category: "лаборатория" },
-        ]},
-        { source: "doq.kz", items: [
-          { rawName: "Прием кардиолога высшей категории", price: 12000, category: "приём врача" },
-          { rawName: "Консультация терапевта (первичная)", price: 7000, category: "приём врача" },
-          { rawName: "Прием эндокринолога, к.м.н.", price: 10000, category: "приём врача" },
-        ]},
-        { source: "orhun.kz", items: [
-          { rawName: "МРТ головного мозга на томографе Philips 1.5T", price: 19500, category: "диагностика" },
-          { rawName: "КТ органов грудной клетки", price: 14000, category: "диагностика" },
-          { rawName: "УЗИ органов брюшной полости комплексное", price: 5500, category: "диагностика" },
-        ]},
-        { source: "helix.kz", items: [
-          { rawName: "Гликозилированный гемоглобин комплексный тест", price: 3400, category: "лаборатория" },
-          { rawName: "Анализ на антитела к COVID-19 IgG", price: 4200, category: "лаборатория" },
-          { rawName: "Скрининг щитовидной железы (Т3, Т4, ТТГ)", price: 7800, category: "лаборатория" },
-        ]},
-        { source: "medel.kz", items: [
-          { rawName: "Рентген органов грудной клетки (цифровой)", price: 3000, category: "диагностика" },
-          { rawName: "Консультация невропатолога", price: 8500, category: "приём врача" },
-        ]},
-        { source: "olymp.kz", items: [
-          { rawName: "Анализ на ТТГ ультрачувствительный", price: 2600, category: "лаборатория" },
-          { rawName: "Клинический анализ крови развернутый", price: 2800, category: "лаборатория" },
-        ]}
-      ];
-
-      // Dynamically add mock items for active sources not covered by mockServices
-      for (const activeSrc of activeSources) {
-        if (!mockServices.some((s: any) => s.source === activeSrc.domain)) {
-          mockServices.push({
-            source: activeSrc.domain,
-            items: [
-              { rawName: `Общий анализ в ${activeSrc.name}`, price: 3000, category: "лаборатория" },
-              { rawName: `Консультация врача в ${activeSrc.name}`, price: 8500, category: "приём врача" },
-              { rawName: `УЗИ диагностика в ${activeSrc.name}`, price: 6000, category: "диагностика" },
-            ]
-          });
-        }
-      }
-
-      for (const src of mockServices) {
-        const srcMeta = activeSources.find((s: any) => s.domain === src.source);
-        if (!srcMeta) continue;
-
-        logs.push(`[КРАУЛЕР] Парсинг ${src.source}: чтение HTML структуры цен...`);
-        
-        for (const item of src.items) {
-          // Add some price variation per city
-          let priceMultiplier = 1.0;
-          if (city === "Астана") priceMultiplier = 1.08;
-          else if (city === "Шымкент") priceMultiplier = 0.92;
-          else if (city === "Караганда") priceMultiplier = 0.95;
-
-          parsedItems.push({
-            id: `raw-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-            source: src.source,
-            rawName: item.rawName,
-            price: Math.round(item.price * priceMultiplier),
-            currency: "KZT",
-            parsedAt: nowStr,
-            durationDays: item.category === "лаборатория" ? 1 : 0,
-            city: city,
-            category: item.category,
-            isActive: true
-          });
-        }
-
-        logs.push(`[ДАННЫЕ] Спарсено ${src.items.length} записей из ${srcMeta.name}. Дедупликация пройдена.`);
-        errorLogs.push({
-          id: `err-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-          source: src.source,
-          timestamp: nowStr,
-          status: "success",
-          message: `Парсинг HTML завершен успешно. Извлечено ${src.items.length} позиций.`
-        });
-      }
-
-      logs.push(`[НОРМАЛИЗАЦИЯ] Запуск ИИ-модели нормализации названий по справочнику МЗ РК...`);
-      logs.push(`[БАЗА ДАННЫХ] Сохранение сырого слоя данных (Raw Layer) в Firestore.`);
-      logs.push(`[УСПЕХ] Сбор данных завершен. Обновлено ${parsedItems.length} позиций. Ошибок: 0.`);
-
-      return res.json({ success: true, items: parsedItems, logs, errorLogs });
-    }
-
-    // Real Gemini AI-powered parsing with Google Search grounding
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const activeSources = PARSER_SOURCES.filter(s => s.isActive);
+      logs.push(`[СИСТЕМА] Активных источников: ${activeSources.length}`);
 
-      for (const src of activeSources) {
-        logs.push(`[КРАУЛЕР] Парсинг ${src.domain}: запрос актуальных цен через ИИ-поиск...`);
-
+      for (const source of activeSources) {
         try {
-          const response = await ai.models.generateContent({
-            model: "gemini-2.0-flash",
-            contents: `Найди актуальные цены на медицинские услуги клиники "${src.name}" (${src.domain}) в городе ${city}, Казахстан.
-Верни JSON массив объектов, каждый объект содержит:
-- "rawName": полное название услуги на русском языке
-- "price": цена в тенге (число, без пробелов)
-- "category": одно из "лаборатория", "приём врача", "диагностика", "процедура"
-
-Верни минимум 3-5 услуг. Только JSON массив, без лишнего текста. Пример:
-[{"rawName":"Общий анализ крови","price":2250,"category":"лаборатория"}]`,
-            config: {
-              tools: [{ googleSearch: {} }],
-              responseMimeType: "application/json"
-            }
-          });
-
-          const text = response.text || "[]";
-          let items: any[] = [];
-          try {
-            const cleaned = cleanAndParseJSON(text);
-            items = Array.isArray(cleaned) ? cleaned : (cleaned.items || cleaned.results || []);
-          } catch {
-            // Try direct parse
-            try {
-              items = JSON.parse(text);
-            } catch {
-              logs.push(`[ПРЕДУПРЕЖДЕНИЕ] Не удалось разобрать ответ для ${src.domain}. Пропуск.`);
-              errorLogs.push({
-                id: `err-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-                source: src.domain,
-                timestamp: nowStr,
-                status: "warning",
-                message: `Не удалось разобрать JSON ответ от Gemini AI.`
-              });
-              continue;
-            }
+          const result = await parserEngine.runSource(source);
+          if (result.isSuccessful) {
+            logs.push(`[КРАУЛЕР] ${source.name}: ${result.recordsExtracted} записей`);
+          } else {
+            logs.push(`[ОШИБКА] ${source.name}: ${result.errors.map(e => e.message).join("; ")}`);
+            result.errors.forEach(err => errorLogs.push({
+              id: `err-${Date.now()}`,
+              source: err.sourceId, timestamp: err.timestamp,
+              status: "error", message: err.message,
+            }));
           }
-
-          if (!Array.isArray(items)) items = [];
-
-          for (const item of items) {
-            if (!item.rawName || !item.price) continue;
-            parsedItems.push({
-              id: `raw-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-              source: src.domain,
-              rawName: String(item.rawName),
-              price: parseInt(String(item.price), 10) || 0,
-              currency: "KZT",
-              parsedAt: nowStr,
-              durationDays: (item.category || "").includes("лаборатор") ? 1 : 0,
-              city: city,
-              category: item.category || "лаборатория",
-              isActive: true
-            });
-          }
-
-          logs.push(`[ДАННЫЕ] Спарсено ${items.length} записей из ${src.name}. Валюта KZT проверена.`);
-          errorLogs.push({
-            id: `err-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-            source: src.domain,
-            timestamp: nowStr,
-            status: "success",
-            message: `ИИ-парсинг завершен. Извлечено ${items.length} позиций через Gemini + Google Search.`
-          });
-        } catch (srcError) {
-          logs.push(`[ОШИБКА] Сбой парсинга ${src.domain}: ${srcError instanceof Error ? srcError.message : String(srcError)}`);
-          errorLogs.push({
-            id: `err-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-            source: src.domain,
-            timestamp: nowStr,
-            status: "error",
-            message: `Ошибка: ${srcError instanceof Error ? srcError.message : String(srcError)}`
-          });
+        } catch (e: any) {
+          logs.push(`[ОШИБКА] ${source.name}: ${e.message}`);
         }
       }
 
-      logs.push(`[НОРМАЛИЗАЦИЯ] Запуск ИИ-модели нормализации названий по справочнику МЗ РК...`);
-      logs.push(`[БАЗА ДАННЫХ] Сохранение сырого слоя данных (Raw Layer) в Firestore.`);
-      logs.push(`[УСПЕХ] Сбор данных завершен. Обновлено ${parsedItems.length} позиций. Ошибок: ${errorLogs.filter((e: any) => e.status === "error").length}.`);
+      // После парсинга — запустить геокодинг
+      try {
+        const { GeoEnricher } = await import("./src/parser/providers/geoEnricher");
+        const enricher = new GeoEnricher();
+        enricher.enrichAllUngeocoded().catch(() => {});
+        logs.push(`[2GIS] Геокодирование запущено в фоне`);
+      } catch {}
 
-      return res.json({ success: true, items: parsedItems, logs, errorLogs });
-    } catch (error) {
-      console.error("Parser error:", error);
-      return res.status(500).json({ 
-        success: false, 
-        error: error instanceof Error ? error.message : String(error),
-        logs: [...logs, `[КРИТИЧЕСКАЯ ОШИБКА] ${error instanceof Error ? error.message : String(error)}`],
-        items: [],
-        errorLogs 
-      });
+      // Загрузить items из MongoDB для отображения в админке
+      try {
+        const { getDb } = await import("./src/lib/mongodb");
+        const db = await getDb();
+        const records = await db.collection("rawTariffs").find().sort({ parsedAt: -1 }).limit(50).toArray();
+        records.forEach((r: any) => {
+          items.push({
+            id: r.id || r._id?.toString(),
+            source: r.sourceUrl || r.clinicName || "",
+            rawName: r.serviceNameRaw || "",
+            price: r.priceKzt || 0,
+            currency: r.currency || "KZT",
+            parsedAt: r.parsedAt ? r.parsedAt.substring(0, 16).replace("T", " ") : "",
+            durationDays: r.durationDays || 1,
+            city: r.city || "",
+            category: r.category || "лаборатория",
+            isActive: r.isActive !== false,
+          });
+        });
+      } catch {}
+
+      logs.push(`[УСПЕХ] Парсинг завершен. Всего: ${items.length} записей.`);
+
+      return res.json({ logs, items, errorLogs });
+    } catch (error: any) {
+      console.error("[run-parser] Error:", error.message);
+      return res.status(500).json({ error: error.message, logs, items, errorLogs });
     }
   });
 
@@ -1256,20 +1285,291 @@ ${cleanedText}
     }
   });
 
+  // GET /api/parser/unmatched — Get unmatched items
+  app.get("/api/parser/unmatched", async (req, res) => {
+    try {
+      const { LocalDataLayer } = await import("./src/parser/localDataLayer");
+      const layer = new LocalDataLayer();
+      const records = await layer.getUnmatchedRecords();
+      res.json({ records, total: records.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/parser/normalize — Manually match an unmatched record
+  app.post("/api/parser/normalize", async (req, res) => {
+    try {
+      const { recordId, serviceId, serviceName } = req.body;
+      if (!recordId || !serviceId) {
+        return res.status(400).json({ error: "recordId and serviceId are required" });
+      }
+
+      const { LocalDataLayer } = await import("./src/parser/localDataLayer");
+      const layer = new LocalDataLayer();
+      await layer.updateNormalization(recordId, serviceId, serviceName || "");
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/parser/geocode — Geocode all un-geocoded clinics
+  app.post("/api/parser/geocode", async (_req, res) => {
+    try {
+      const { GeoEnricher } = await import("./src/parser/providers/geoEnricher");
+      const enricher = new GeoEnricher();
+      enricher.enrichAllUngeocoded().then(() => {
+        console.log("[GeoEnricher] Background task completed.");
+      }).catch((err: any) => {
+        console.error("[GeoEnricher] Background failed:", err.message);
+      });
+      res.json({ success: true, message: "Геокодирование запущено в фоне." });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/clinics/logos — Retrieve all clinic logos
+  app.get("/api/clinics/logos", async (req, res) => {
+    try {
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+      const list = await db.collection("clinicLogos").find({}).toArray();
+      const mappedList = list.map(item => {
+        const { _id, ...rest } = item;
+        return { id: item.id || String(_id), ...rest };
+      });
+      res.json(mappedList);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/parser/fetch-logos — Run background logo scraping task
+  app.post("/api/parser/fetch-logos", async (req, res) => {
+    try {
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+
+      // Trigger background parser
+      (async () => {
+        console.log("[LogoFetcher] Starting background logo gathering...");
+        const uniqueClinicNames = await db.collection("rawTariffs").distinct("clinicName");
+        console.log(`[LogoFetcher] Found ${uniqueClinicNames.length} unique clinic names in database.`);
+
+        for (const name of uniqueClinicNames) {
+          if (!name) continue;
+          const nameTrimmed = name.trim();
+          const clinicId = `clinic-${nameTrimmed.toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")}`;
+
+          // Check if already has a valid logo URL in clinicLogos
+          const existing = await db.collection("clinicLogos").findOne({ clinicId });
+          if (existing?.logoUrl) {
+            console.log(`[LogoFetcher] Logo already exists for: "${nameTrimmed}". Skipping.`);
+            continue;
+          }
+
+          let logoUrl = "";
+          let logoSource = "";
+
+          const nameLower = nameTrimmed.toLowerCase();
+          
+          // 1. Hardcoded major networks
+          if (nameLower.includes("олимп") || nameLower.includes("olymp")) {
+            logoUrl = "https://kdlolymp.kz/favicons/android-chrome-512x512.png";
+            logoSource = "kdl";
+          } else if (nameLower.includes("инвитро") || nameLower.includes("invitro")) {
+            logoUrl = "https://invitro.kz/local/templates/invitro_main/src/image/icons/footer/logo.svg";
+            logoSource = "invitro";
+          } else if (nameLower.includes("инвиво") || nameLower.includes("invivo")) {
+            logoUrl = "https://invivo.kz/images/logo.svg";
+            logoSource = "invivo";
+          }
+
+          // 2. 2GIS Catalog API search
+          if (!logoUrl) {
+            try {
+              console.log(`[LogoFetcher] Querying 2GIS for: "${nameTrimmed}"`);
+              const dgisRes = await axios.get("https://catalog.api.2gis.com/3.0/items", {
+                params: { 
+                  q: nameTrimmed, 
+                  location: "76.889,43.238", // anchor Almaty center
+                  key: "26c65059-f062-4a91-a973-b8a38fedf562", 
+                  limit: 1, 
+                  fields: "items.external_content,items.contact_groups" 
+                },
+                timeout: 5000
+              });
+              const item = dgisRes.data?.result?.items?.[0];
+              if (item?.external_content?.logo?.url) {
+                logoUrl = item.external_content.logo.url;
+                logoSource = "2gis";
+              }
+              if (!logoUrl) {
+                const site = item?.contact_groups?.[0]?.items?.find((i: any) => i.type === "website")?.value || "";
+                if (site) {
+                  const domain = site.replace(/^https?:\/\//i, '').split('/')[0];
+                  logoUrl = `https://www.google.com/s2/favicons?sz=128&domain=${domain}`;
+                  logoSource = "favicon";
+                }
+              }
+            } catch (dgisErr) {
+              console.warn(`[LogoFetcher] 2GIS request failed for "${nameTrimmed}":`, dgisErr instanceof Error ? dgisErr.message : dgisErr);
+            }
+          }
+
+          // 3. TopDoc.kz lookup fallback
+          if (!logoUrl) {
+            try {
+              console.log(`[LogoFetcher] Querying TopDoc for: "${nameTrimmed}"`);
+              const tdRes = await axios.get(`https://www.topdoc.kz/search?q=${encodeURIComponent(nameTrimmed)}`, {
+                headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+                timeout: 5000
+              });
+              const $ = cheerio.load(tdRes.data);
+              const img = $('img[src*="Company"]').first().attr('src');
+              if (img) {
+                logoUrl = img.startsWith('http') ? img : `https://www.topdoc.kz${img}`;
+                logoSource = "topdoc";
+              }
+            } catch (tdErr) {
+              console.warn(`[LogoFetcher] TopDoc request failed for "${nameTrimmed}":`, tdErr instanceof Error ? tdErr.message : tdErr);
+            }
+          }
+
+          // 4. Guessed favicon domains
+          if (!logoUrl) {
+            let guessedDomain = "";
+            if (nameLower.includes("сункар") || nameLower.includes("sunkar")) guessedDomain = "sunkar.kz";
+            else if (nameLower.includes("орхун") || nameLower.includes("orhun")) guessedDomain = "orhunmedical.kz";
+            else if (nameLower.includes("хак") || nameLower.includes("hak")) guessedDomain = "hakmedical.kz";
+            else if (nameLower.includes("керуен") || nameLower.includes("keruen")) guessedDomain = "keruen.kz";
+            else if (nameLower.includes("эскулап") || nameLower.includes("aesculap")) guessedDomain = "aesculap.kz";
+            else if (nameLower.includes("dau") || nameLower.includes("дау")) guessedDomain = "daumed.kz";
+
+            if (guessedDomain) {
+              logoUrl = `https://www.google.com/s2/favicons?sz=128&domain=${guessedDomain}`;
+              logoSource = "favicon";
+            }
+          }
+
+          // Write logo results
+          if (logoUrl) {
+            console.log(`[LogoFetcher] Resolved logo for "${nameTrimmed}" -> ${logoUrl} (${logoSource})`);
+            await db.collection("clinics").updateOne(
+              { clinicId },
+              { $set: { clinicId, name: nameTrimmed, logoUrl, logoSource } },
+              { upsert: true }
+            );
+            await db.collection("clinicLogos").updateOne(
+              { clinicId },
+              { $set: { clinicId, name: nameTrimmed, logoUrl, logoSource } },
+              { upsert: true }
+            );
+          } else {
+            console.log(`[LogoFetcher] Could not resolve logo for "${nameTrimmed}".`);
+          }
+
+          // Rate limit delay
+          await new Promise(r => setTimeout(r, 800));
+        }
+        console.log("[LogoFetcher] Logo gathering process finished successfully.");
+      })().catch(err => {
+        console.error("[LogoFetcher] Background processing crashed:", err);
+      });
+
+      res.json({ success: true, message: "Сбор логотипов клиник успешно запущен в фоне." });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/parser/errors — Get parser errors
+  app.get("/api/parser/errors", async (req, res) => {
+    try {
+      const { ParserErrorLogger } = await import("./src/parser/errorLogger");
+      const logger = new ParserErrorLogger();
+      const sourceId = req.query.sourceId as string | undefined;
+      const errors = await logger.getRecentErrors(sourceId);
+      res.json({ errors, total: errors.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // =====================================================
+  // CRON SCHEDULING — run all active sources daily at midnight
+  // =====================================================
+
+  cron.schedule("0 5 * * *", async () => {
+    console.log("[CRON] Starting daily parser run for all active sources...");
+    const { ParserEngine } = await import("./src/parser/parserEngine");
+    const parserEngine = new ParserEngine();
+    const results = await parserEngine.runAllSources();
+    console.log(
+      `[CRON] Daily run complete. ${results.filter((r) => r.isSuccessful).length}/${results.length} sources OK.`
+    );
+  }, { timezone: "Asia/Almaty" });
+
+  const { ParserEngine } = await import("./src/parser/parserEngine");
+  const parserEngine = new ParserEngine();
+  const { PARSER_SOURCES } = await import("./src/parser/sources");
+  
+  for (const source of PARSER_SOURCES) {
+    if (source.cronExpression && source.isActive) {
+      cron.schedule(source.cronExpression, async () => {
+        console.log(`[CRON] Running scheduled parser for source: ${source.id}`);
+        await parserEngine.runSource(source);
+      }, { timezone: "Asia/Almaty" });
+    }
+  }
+
+  // Serve admin.html at /admin
+  const adminHtmlPath = path.join(process.cwd(), "admin.html");
+
   // Vite development middleware vs Static Production bundle serving
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { 
+        middlewareMode: true,
+        allowedHosts: true as any
+      },
       appType: "spa",
     });
+
+    // Serve admin page through Vite transform pipeline
+    const serveAdmin = async (_req: any, res: any) => {
+      try {
+        const html = await vite.transformIndexHtml("/admin.html", fs.readFileSync(adminHtmlPath, "utf-8"));
+        res.send(html);
+      } catch (err: any) {
+        res.status(500).send(`Admin page error: ${err.message}`);
+      }
+    };
+    app.get("/admin", serveAdmin);
+    app.get("/admin.html", serveAdmin);
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
+    app.get(["/admin", "/admin.html"], (_req, res) => {
+      res.sendFile(path.join(distPath, "admin.html"));
+    });
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+
+  // Generic error handler to catch SyntaxErrors from body-parser
+  app.use((err: any, req: any, res: any, next: any) => {
+    if (err instanceof SyntaxError && "status" in err && err.message.includes("JSON")) {
+      console.warn("[Express] Gracefully handled invalid JSON payload request:", err.message);
+      return res.status(400).json({ error: "Invalid JSON payload" });
+    }
+    next(err);
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`MedTariff.kz server listening on http://0.0.0.0:${PORT}`);

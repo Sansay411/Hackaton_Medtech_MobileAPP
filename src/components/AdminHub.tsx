@@ -4,10 +4,10 @@ import {
   RefreshCw, ListFilter, Trash2, Mail, Bell, Sparkles, 
   Plus, Edit2, ArrowRight, ArrowUpRight, Check, CheckCircle, Info, HelpCircle,
   Search, Heart, Eye, Star, User, Table, Edit3, BarChart3, Lock, Key, 
-  Play as PlayIcon, Loader2, Folder, File, Layers, Settings, BookOpen, AlertCircle
+  Play as PlayIcon, Loader2, Folder, File, Layers, Settings, BookOpen, AlertCircle, Upload
 } from "lucide-react";
 import { SERVICES_CATALOG, NormalizedService } from "../data/servicesCatalog";
-import { db, collection, getDocs, setDoc, doc, addDoc, deleteDoc, onSnapshot, writeBatch } from "../lib/firebase";
+import { db, collection, getDocs, setDoc, doc, addDoc, deleteDoc, onSnapshot, writeBatch } from "../lib/dbBridge";
 import { BlogPost } from "../types";
 import Logo from "./Logo";
 
@@ -196,11 +196,11 @@ export default function AdminHub({
     }
   };
 
-  // load all data from firestore
-  const loadAllFromFirestore = useCallback(async () => {
+  // load all data from MongoDB
+  const loadAllFromMongoDB = useCallback(async () => {
     if (dataLoadedRef.current) return;
     setIsLoadingData(true);
-    setLogs(["[СИСТЕМА] Загрузка данных из Firebase Firestore..."]);
+    setLogs(["[СИСТЕМА] Загрузка данных из MongoDB MongoDB..."]);
     try {
       // 1. Load parsed tariffs
       const tariffSnap = await getDocs(collection(db, "parsedTariffs"));
@@ -229,7 +229,7 @@ export default function AdminHub({
 
       // If all collections are empty — seed initial data
       if (tariffs.length === 0 && errLogs.length === 0 && unm.length === 0 && srcList.length === 0) {
-        setLogs(prev => [...prev, "[СИСТЕМА] Firestore коллекции пусты. Создание начальных данных..."]);
+        setLogs(prev => [...prev, "[СИСТЕМА] MongoDB коллекции пусты. Создание начальных данных..."]);
         await seedInitialData();
         dataLoadedRef.current = true;
         setIsLoadingData(false);
@@ -250,7 +250,7 @@ export default function AdminHub({
 
       dataLoadedRef.current = true;
     } catch (err) {
-      console.error("Firestore load error:", err);
+      console.error("MongoDB load error:", err);
       setLogs(prev => [...prev, `[ОШИБКА] Не удалось загрузить данные: ${err instanceof Error ? err.message : String(err)}`]);
     } finally {
       setIsLoadingData(false);
@@ -327,13 +327,13 @@ export default function AdminHub({
   };
 
   useEffect(() => {
-    loadAllFromFirestore();
-  }, [loadAllFromFirestore]);
+    loadAllFromMongoDB();
+  }, [loadAllFromMongoDB]);
 
-  const handleSyncToFirestore = async () => {
+  const handleSyncToMongoDB = async () => {
     if (rawItems.length === 0) return;
     setIsSyncing(true);
-    setLogs(prev => [...prev, "[БАЗА ДАННЫХ] Начало синхронизации сырого слоя с Firestore..."]);
+    setLogs(prev => [...prev, "[БАЗА ДАННЫХ] Начало синхронизации сырого слоя с MongoDB..."]);
     
     try {
       let count = 0;
@@ -367,11 +367,11 @@ export default function AdminHub({
 
       setLogs(prev => [
         ...prev,
-        `[БАЗА ДАННЫХ] УСПЕХ: Синхронизировано ${count} клиник в Firestore!`,
+        `[БАЗА ДАННЫХ] УСПЕХ: Синхронизировано ${count} клиник в MongoDB!`,
         `[БАЗА ДАННЫХ] Логи парсера сохранены в коллекции /parserLogs.`
       ]);
     } catch (err) {
-      console.error("Failed to sync with Firestore:", err);
+      console.error("Failed to sync with MongoDB:", err);
       setLogs(prev => [...prev, `[ОШИБКА БАЗЫ] Не удалось выполнить запись: ${err instanceof Error ? err.message : String(err)}`]);
     } finally {
       setIsSyncing(false);
@@ -401,7 +401,7 @@ export default function AdminHub({
       }
 
       if (data.items && data.items.length > 0) {
-        setLogs(prev => [...prev, "[FIREBASE] Сохранение результатов парсинга в Firestore..."]);
+        setLogs(prev => [...prev, "[MongoDB] Сохранение результатов парсинга в MongoDB..."]);
         const batch = writeBatch(db);
         const newItems: ScrapedRawItem[] = [];
         
@@ -414,7 +414,7 @@ export default function AdminHub({
         
         await batch.commit();
         setRawItems(prev => [...newItems, ...prev]);
-        setLogs(prev => [...prev, `[FIREBASE] Сохранено ${newItems.length} записей в коллекцию parsedTariffs.`]);
+        setLogs(prev => [...prev, `[MongoDB] Сохранено ${newItems.length} записей в коллекцию parsedTariffs.`]);
       }
 
       if (data.errorLogs && data.errorLogs.length > 0) {
@@ -430,7 +430,7 @@ export default function AdminHub({
         setErrorLogs(prev => [...newLogs, ...prev]);
       }
 
-      setLogs(prev => [...prev, `[УСПЕХ] Парсинг завершен. ${data.items?.length || 0} записей сохранены в Firebase.`]);
+      setLogs(prev => [...prev, `[УСПЕХ] Парсинг завершен. ${data.items?.length || 0} записей сохранены в MongoDB.`]);
       if (onAddLogMessage) onAddLogMessage("Парсинг успешно завершен!");
     } catch (err) {
       console.error("Parser API error:", err);
@@ -460,7 +460,7 @@ export default function AdminHub({
     try {
       await deleteDoc(doc(db, "unmatchedQueue", unmId));
     } catch (err) {
-      console.error("Failed to delete unmatched item from Firestore:", err);
+      console.error("Failed to delete unmatched item from MongoDB:", err);
     }
     setUnmatchedQueue(prev => prev.filter(u => u.id !== unmId));
     
@@ -486,7 +486,7 @@ export default function AdminHub({
       const ref = await addDoc(collection(db, "parsedTariffs"), newRawData);
       setRawItems(prev => [{ id: ref.id, ...newRawData }, ...prev]);
     } catch (err) {
-      console.error("Failed to add parsed tariff to Firestore:", err);
+      console.error("Failed to add parsed tariff to MongoDB:", err);
       setRawItems(prev => [{ id: `raw-${Date.now()}`, ...newRawData }, ...prev]);
     }
 
@@ -512,7 +512,7 @@ export default function AdminHub({
       setNewSourceDomain("");
       setLogs(prev => [...prev, `[ИСТОЧНИКИ] Добавлен новый источник: ${newSource.name} (${newSource.domain})`]);
     } catch (err) {
-      console.error("Failed to add parsing source to Firestore:", err);
+      console.error("Failed to add parsing source to MongoDB:", err);
       setParsingSources(prev => [...prev, { id: docId, ...newSource }]);
       setNewSourceName("");
       setNewSourceDomain("");
@@ -529,7 +529,7 @@ export default function AdminHub({
       setParsingSources(prev => prev.map(s => s.id === sourceId ? { ...s, isActive: updatedActive } : s));
       setLogs(prev => [...prev, `[ИСТОЧНИКИ] Источник ${sourceId} ${updatedActive ? "активирован" : "деактивирован"}`]);
     } catch (err) {
-      console.error("Failed to toggle parsing source in Firestore:", err);
+      console.error("Failed to toggle parsing source in MongoDB:", err);
       setParsingSources(prev => prev.map(s => s.id === sourceId ? { ...s, isActive: updatedActive } : s));
     }
   };
@@ -540,7 +540,7 @@ export default function AdminHub({
       setParsingSources(prev => prev.filter(s => s.id !== sourceId));
       setLogs(prev => [...prev, `[ИСТОЧНИКИ] Источник ${sourceId} удален из базы`]);
     } catch (err) {
-      console.error("Failed to delete parsing source from Firestore:", err);
+      console.error("Failed to delete parsing source from MongoDB:", err);
       setParsingSources(prev => prev.filter(s => s.id !== sourceId));
     }
   };
@@ -563,7 +563,7 @@ export default function AdminHub({
       setNewSubEmail("");
       setLogs(prev => [...prev, `[ПОДПИСКА] Создана подписка для ${newSubEmail} на ${newSubService} в ${newSubClinic}.`]);
     } catch (err) {
-      console.error("Failed to save subscription to Firestore:", err);
+      console.error("Failed to save subscription to MongoDB:", err);
       setSubscriptions(prev => [{ id: `sub-${Date.now()}`, ...newSubData }, ...prev]);
       setNewSubEmail("");
     }
@@ -578,11 +578,11 @@ export default function AdminHub({
   });
 
   return (
-    <div className="flex min-h-screen bg-[#f3f7fc] font-sans text-slate-800 w-full text-left antialiased">
+    <div className="flex h-screen overflow-hidden bg-[#f3f7fc] font-sans text-slate-800 w-full text-left antialiased">
       
       {/* 1. FLOATING LEFT SIDEBAR PANEL — Beautiful light ice-blue card with slate-blue icons */}
       <div className="w-80 shrink-0 p-5 flex">
-        <aside className="flex-1 bg-white rounded-3xl flex flex-col justify-between overflow-hidden border border-blue-100/80 shadow-md">
+        <aside className="flex-1 bg-white rounded-3xl flex flex-col justify-between overflow-y-auto no-scrollbar border border-blue-100/80 shadow-md">
           
           {/* Top portion: Logo + Nav */}
           <div className="p-6 space-y-8">
@@ -788,7 +788,7 @@ export default function AdminHub({
                     </button>
 
                     <button
-                      onClick={handleSyncToFirestore}
+                      onClick={handleSyncToMongoDB}
                       disabled={isParsing || isSyncing || rawItems.length === 0}
                       className={`px-4 py-2.5 rounded-xl text-[10.5px] font-black uppercase tracking-wider flex items-center gap-1.5 transition duration-300 cursor-pointer border border-blue-100 shadow-sm ${
                         isSyncing
@@ -803,13 +803,13 @@ export default function AdminHub({
                       ) : (
                         <Database className="w-3.5 h-3.5" />
                       )}
-                      <span>{isSyncing ? "Синхронизация..." : "Синхронизировать с Firestore"}</span>
+                      <span>{isSyncing ? "Синхронизация..." : "Синхронизировать с MongoDB"}</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Simulated Cyber Terminal */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-inner space-y-1.5 max-h-56 overflow-y-auto font-mono text-[10px] text-emerald-400 select-all no-scrollbar">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-inner space-y-1.5 max-h-56 overflow-y-auto font-mono text-[10px] text-emerald-400 select-all">
                   <div className="flex items-center gap-2 text-slate-500 border-b border-slate-800 pb-2 mb-2 shrink-0">
                     <Terminal className="w-4 h-4" />
                     <span className="font-black uppercase tracking-wider">MedServicePrice Headless Crawler Shell v1.0.4</span>
@@ -915,7 +915,7 @@ export default function AdminHub({
               <div className="bg-white p-5 rounded-3xl border border-blue-50/80 space-y-4 text-left shadow-xs">
                 <h3 className="font-black text-xs text-slate-900 uppercase tracking-tight">Журнал Ошибок Парсера (Audit Log)</h3>
                 
-                <div className="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {errorLogs.map((item) => (
                     <div 
                       key={item.id} 
@@ -959,7 +959,7 @@ export default function AdminHub({
                   </span>
                 </div>
 
-                <div className="overflow-x-auto no-scrollbar border border-slate-100 rounded-2xl bg-white">
+                <div className="overflow-x-auto border border-slate-100 rounded-2xl bg-white max-h-[450px] overflow-y-auto">
                   <table className="w-full text-left border-collapse text-[10px] font-semibold">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-100 text-slate-450 uppercase tracking-wider text-[8px] font-black">
@@ -1028,7 +1028,7 @@ export default function AdminHub({
               </div>
 
               {/* Catalog list grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[550px] overflow-y-auto pr-2 no-scrollbar text-left">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[550px] overflow-y-auto pr-2 text-left">
                 {filteredCatalog.length === 0 ? (
                   <div className="col-span-2 p-10 text-center bg-white border border-slate-100 rounded-3xl text-slate-400 font-bold text-xs shadow-xs">
                     Ничего не найдено в справочнике
@@ -1098,7 +1098,7 @@ export default function AdminHub({
                   <div className="space-y-3">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block px-1">Нераспознанные строки тарифов ({unmatchedQueue.length})</span>
                     
-                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 no-scrollbar">
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
                       {unmatchedQueue.map((item) => {
                         const isSelected = selectedUnmatchedId === item.id || (!selectedUnmatchedId && unmatchedQueue[0].id === item.id);
                         return (
@@ -1254,7 +1254,7 @@ export default function AdminHub({
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-1 no-scrollbar">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-1">
                 {subscriptions.length === 0 ? (
                   <div className="col-span-2 py-12 text-center bg-slate-50 border border-slate-100 rounded-3xl text-slate-400 font-bold text-xs">
                     Нет активных подписок пользователей в БД
@@ -1331,7 +1331,7 @@ export default function AdminHub({
                   </button>
                 </div>
 
-                <div className="space-y-4 max-h-[550px] overflow-y-auto pr-1 no-scrollbar">
+                <div className="space-y-4 max-h-[550px] overflow-y-auto pr-1">
                   {blogPosts.length === 0 ? (
                     <div className="p-12 text-center bg-white border border-slate-100 rounded-3xl text-slate-400 font-bold text-xs shadow-xs">
                       <BookOpen className="w-8 h-8 text-slate-350 mx-auto mb-2" />
@@ -1480,6 +1480,29 @@ export default function AdminHub({
                         onChange={(e) => setBlogImageUrl(e.target.value)}
                         className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500 text-slate-700"
                       />
+                      
+                      <label className="bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl text-[9.5px] font-black uppercase tracking-wider flex items-center gap-1 transition cursor-pointer active:scale-95 text-slate-700">
+                        <Upload className="w-3 h-3 text-slate-500" />
+                        <span>Загрузить</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                if (event.target?.result) {
+                                  setBlogImageUrl(event.target.result as string);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+
                       <button
                         type="button"
                         onClick={handleGenerateCover}

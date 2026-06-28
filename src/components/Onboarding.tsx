@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { MapPin, Search, Phone, ArrowRight, Chrome, CheckCircle2, ShieldCheck, ChevronLeft, Sparkles, Check } from "lucide-react";
-import { auth, googleProvider, signInWithPopup, db, doc, setDoc, handleFirestoreError, OperationType } from "../lib/firebase";
+import { auth, googleProvider, signInWithPopup, db, doc, setDoc, handleMongoDBError, OperationType } from "../lib/dbBridge";
 import Logo from "./Logo";
 import { OnboardingState } from "../types";
 
@@ -90,8 +90,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setFilteredSuggestions(result);
   }, [searchTerm, activeCategory]);
 
-  // Firebase auth state
-  const [firebaseUser, setFirebaseUser] = useState<any>(null);
+  // MongoDB auth state
+  const [MongoDBUser, setMongoDBUser] = useState<any>(null);
 
   const handleCitySelect = (city: string) => {
     setSelectedCity(city);
@@ -103,14 +103,14 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setStep("auth");
   };
 
-  // Handle Google Sign-in with Firebase
+  // Handle Google Sign-in with MongoDB
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     setErrorMsg("");
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
-      setFirebaseUser(user);
+      setMongoDBUser(user);
       
       // Save initial user profile info
       try {
@@ -124,12 +124,12 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           lastLogin: new Date().toISOString(),
         }, { merge: true });
       } catch (dbErr) {
-        console.error("Failed to write user profile to Firestore:", dbErr);
-        handleFirestoreError(dbErr, OperationType.UPDATE, `users/${user.uid}`);
+        console.error("Failed to write user profile to MongoDB:", dbErr);
+        handleMongoDBError(dbErr, OperationType.UPDATE, `users/${user.uid}`);
       }
 
     } catch (err: any) {
-      console.error("Firebase Google Sign-in failed:", err);
+      console.error("MongoDB Google Sign-in failed:", err);
       setErrorMsg("Ошибка авторизации Google. Пожалуйста, попробуйте снова.");
     } finally {
       setIsLoading(false);
@@ -173,7 +173,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     }
 
     setIsLoading(true);
-    const finalUser = firebaseUser || { uid: "anon-" + Date.now(), displayName: "Гость", email: "guest@medtariff.kz" };
+    const finalUser = MongoDBUser || { uid: "anon-" + Date.now(), displayName: "Гость", email: "guest@medtariff.kz" };
     try {
       await setDoc(doc(db, "users", finalUser.uid), {
         uid: finalUser.uid,
@@ -194,10 +194,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         userName: finalUser.displayName,
       });
     } catch (err) {
-      console.error("Failed to write onboarding record to Firestore:", err);
+      console.error("Failed to write onboarding record to MongoDB:", err);
       try {
-        handleFirestoreError(err, OperationType.UPDATE, `users/${finalUser.uid}`);
-      } catch (firestoreError) {
+        handleMongoDBError(err, OperationType.UPDATE, `users/${finalUser.uid}`);
+      } catch (MongoDBError) {
         // Fallback completion so guest usage isn't blocked even if rules or network fails
         onComplete({
           city: selectedCity,
@@ -219,8 +219,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       intent: selectedIntent,
       phone: mockPhone,
       isCompleted: true,
-      userName: firebaseUser ? firebaseUser.displayName : "Гость",
-      userEmail: firebaseUser ? firebaseUser.email : undefined,
+      userName: MongoDBUser ? MongoDBUser.displayName : "Гость",
+      userEmail: MongoDBUser ? MongoDBUser.email : undefined,
     });
   };
 
@@ -520,7 +520,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               )}
 
               {/* Google Sign In First (Optional but Recommended) */}
-              {!firebaseUser ? (
+              {!MongoDBUser ? (
                 <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-center space-y-3 mb-4 shadow-3xs">
                   <div className="flex justify-center">
                     {/* Beautiful, large, pixel-perfect Google Logo */}
@@ -562,7 +562,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   <div>
                     <span className="font-bold block">Вход выполнен успешно!</span>
                     <span className="text-[10px] text-emerald-700 block opacity-90 truncate max-w-[180px] sm:max-w-none">
-                      {firebaseUser.email}
+                      {MongoDBUser.email}
                     </span>
                   </div>
                 </div>
