@@ -106,5 +106,17 @@
     "recordsUnmatched": 699,
     "errorCount": 0,
     "isSuccessful": true
+  },
+  {
+    "sourceId": "topdoc-almaty-laboratories",
+    "startedAt": "2026-06-28T10:29:27.677Z",
+    "completedAt": "2026-06-28T10:29:29.982Z",
+    "durationMs": 2305,
+    "recordsExtracted": 122,
+    "recordsNew": 0,
+    "recordsNormalized": 0,
+    "recordsUnmatched": 0,
+    "errorCount": 0,
+    "isSuccessful": true
   }
 ]
