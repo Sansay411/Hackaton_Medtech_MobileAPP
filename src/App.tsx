@@ -1029,14 +1029,16 @@ export default function App() {
   // Auto-synchronize active map marker when sorting or filtering changes
   useEffect(() => {
     if (sortedClinics.length > 0) {
-      const activeExists = sortedClinics.some(c => c.id === activeMarkerId);
-      if (!activeExists) {
-        setActiveMarkerId(sortedClinics[0].id);
-      }
+      setActiveMarkerId(prevId => {
+        if (prevId && sortedClinics.some(c => c.id === prevId)) return prevId;
+        return sortedClinics[0].id;
+      });
     } else {
       setActiveMarkerId(undefined);
     }
-  }, [sortBy, osmsFilter, clinics, activeMarkerId]);
+    // Only run on filter/sort change, NOT when user clicks a marker
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortBy, osmsFilter]);
 
   const handleBookClinic = (clinicId: string) => {
     const clinic = clinics.find(c => c.id === clinicId);

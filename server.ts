@@ -730,6 +730,58 @@ async function startServer() {
   // =====================================================
   // SHARED SEARCH ENGINE — exact city, multi-strategy, used by both search & map
   // =====================================================
+  // Medical synonym expansion for smart search
+  const MEDICAL_SYNONYMS: Record<string, string[]> = {
+    "оак": ["общий анализ крови", "cbc", "клинический анализ крови", "гемоглобин", "лейкоциты"],
+    "cbc": ["общий анализ крови", "оак", "клинический анализ крови"],
+    "узи": ["ультразвук", "ультразвуковой", "эхография", "сонография"],
+    "мрт": ["магнитно-резонансная томография", "томограф"],
+    "кт": ["компьютерная томография", "томография"],
+    "экг": ["электрокардиограмма", "электрокардиография", "сердце"],
+    "эхокг": ["эхокардиография", "узи сердца", "эхо"],
+    "вч": ["вич", "hiv", "спид"],
+    "hiv": ["вич", "вч"],
+    "гепатит": ["hcv", "hbsag", "hepatitis"],
+    "сахар": ["глюкоза", "диабет", "гликированный"],
+    "пцр": ["pcr", "полимеразная цепная реакция", "днк", "рнк"],
+    "алт": ["аланинаминотрансфераза", "печень"],
+    "аст": ["аспартатаминотрансфераза", "печень"],
+    "ттг": ["тиреотропный гормон", "tsh", "щитовидная"],
+    "биохимия": ["биохимический анализ крови", "бак"],
+    "ферритин": ["железо", "анемия"],
+    "холестерин": ["липидный профиль", "липиды", "hdl", "ldl"],
+    "витамин": ["25-oh", "кальциферол"],
+    "онкомаркер": ["ca-125", "ca-19", "ca-15", "раковый", "опухолевый"],
+    "кровь": ["гематология"],
+    "моча": ["оам", "общий анализ мочи"],
+  };
+
+  function expandSearchTerms(words: string[]): string[] {
+    const expanded = new Set(words.map(w => w.toLowerCase()));
+    for (const w of words) {
+      const low = w.toLowerCase();
+      const synonyms = MEDICAL_SYNONYMS[low];
+      if (synonyms) {
+        for (const syn of synonyms) {
+          for (const synWord of syn.split(/\s+/)) {
+            if (synWord.length > 2) expanded.add(synWord);
+          }
+        }
+      }
+      // Also check partial matches (e.g., "гемоглоб" should match "гемоглобин")
+      for (const [key, vals] of Object.entries(MEDICAL_SYNONYMS)) {
+        if (key.includes(low) || low.includes(key)) {
+          for (const syn of vals) {
+            for (const synWord of syn.split(/\s+/)) {
+              if (synWord.length > 2) expanded.add(synWord);
+            }
+          }
+        }
+      }
+    }
+    return [...expanded].filter(w => w.length >= 2);
+  }
+
   async function searchRawTariffs(query: string, city: string, allowCrossCity: boolean): Promise<{ items: any[]; fromOtherCities: boolean }> {
     const { getDb } = await import("./src/lib/mongodb");
     const db = await getDb();
@@ -737,6 +789,10 @@ async function startServer() {
     const rawWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const words = rawWords.filter((w: string) => w.length >= 2);
     const searchWords = words.length > 0 ? words : rawWords;
+
+    // SMART SEARCH: expand medical terms
+    const expandedWords = expandSearchTerms(searchWords);
+    const finalSearchWords = expandedWords.length > 0 ? expandedWords : searchWords;
 
     // EXACT city match — find the canonical city name in DB
     const dbCities = await db.collection("rawTariffs").distinct("city");
@@ -751,9 +807,9 @@ async function startServer() {
 
     let items: any[] = [];
 
-    if (searchWords.length > 0) {
+    if (finalSearchWords.length > 0) {
       // Strategy 1: OR across 4 fields, exact city
-      const orClauses = searchWords.flatMap((w: string) => [
+      const orClauses = finalSearchWords.flatMap((w: string) => [
         { serviceNameRaw: { $regex: w, $options: "i" } },
         { serviceNameNorm: { $regex: w, $options: "i" } },
         { clinicName: { $regex: w, $options: "i" } },
@@ -763,8 +819,8 @@ async function startServer() {
         .find({ ...cityFilter, $or: orClauses }).project(PROJECTION).limit(150).toArray();
 
       // Strategy 2: prefix matching, same city
-      if (items.length < 8 && searchWords.some(w => w.length > 4)) {
-        const prefixClauses = searchWords.filter(w => w.length > 4).flatMap((w: string) => {
+      if (items.length < 8 && finalSearchWords.some(w => w.length > 4)) {
+        const prefixClauses = finalSearchWords.filter(w => w.length > 4).flatMap((w: string) => {
           const prefix = w.substring(0, Math.max(3, w.length - 2));
           return [
             { serviceNameRaw: { $regex: prefix, $options: "i" } },
@@ -786,8 +842,8 @@ async function startServer() {
 
     // Strategy 3: cross-city only if allowed (search only, NOT map)
     let fromOtherCities = false;
-    if (items.length === 0 && allowCrossCity && searchWords.length > 0) {
-      const crossClauses = searchWords.flatMap((w: string) => [
+    if (items.length === 0 && allowCrossCity && finalSearchWords.length > 0) {
+      const crossClauses = finalSearchWords.flatMap((w: string) => [
         { serviceNameRaw: { $regex: w, $options: "i" } },
         { serviceNameNorm: { $regex: w, $options: "i" } },
         { clinicName: { $regex: w, $options: "i" } },
@@ -806,8 +862,8 @@ async function startServer() {
           if (Array.isArray(rawJson)) {
             items = rawJson.filter((item: any) => {
               if (item.city && item.city.toLowerCase() !== city.toLowerCase()) return false;
-              if (searchWords.length === 0) return true;
-              return searchWords.some((w: string) =>
+              if (finalSearchWords.length === 0) return true;
+              return finalSearchWords.some((w: string) =>
                 (item.serviceNameRaw || "").toLowerCase().includes(w) ||
                 (item.serviceNameNorm || "").toLowerCase().includes(w) ||
                 (item.clinicName || "").toLowerCase().includes(w)
