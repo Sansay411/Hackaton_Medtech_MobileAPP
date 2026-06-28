@@ -743,6 +743,12 @@ async function startServer() {
     const canonicalCity = dbCities.find((c: string) => c.toLowerCase() === city.toLowerCase()) || city;
     const cityFilter = { city: canonicalCity };
 
+    const PROJECTION = {
+      clinicId: 1, clinicName: 1, city: 1, address: 1, phone: 1,
+      serviceNameRaw: 1, serviceNameNorm: 1, priceKzt: 1,
+      osmsEligible: 1, parsedAt: 1, lat: 1, lng: 1, sourceUrl: 1,
+    };
+
     let items: any[] = [];
 
     if (searchWords.length > 0) {
@@ -753,7 +759,8 @@ async function startServer() {
         { clinicName: { $regex: w, $options: "i" } },
         { address: { $regex: w, $options: "i" } },
       ]);
-      items = await db.collection("rawTariffs").find({ ...cityFilter, $or: orClauses }).limit(300).toArray();
+      items = await db.collection("rawTariffs")
+        .find({ ...cityFilter, $or: orClauses }).project(PROJECTION).limit(150).toArray();
 
       // Strategy 2: prefix matching, same city
       if (items.length < 8 && searchWords.some(w => w.length > 4)) {
@@ -765,14 +772,16 @@ async function startServer() {
             { clinicName: { $regex: prefix, $options: "i" } },
           ];
         });
-        const more = await db.collection("rawTariffs").find({ ...cityFilter, $or: prefixClauses }).limit(200).toArray();
+        const more = await db.collection("rawTariffs")
+          .find({ ...cityFilter, $or: prefixClauses }).project(PROJECTION).limit(100).toArray();
         const seenIds = new Set(items.map((r: any) => r._id?.toString()));
         for (const item of more) {
           if (!seenIds.has(item._id?.toString())) { items.push(item); seenIds.add(item._id?.toString()); }
         }
       }
     } else {
-      items = await db.collection("rawTariffs").find(cityFilter).limit(300).toArray();
+      items = await db.collection("rawTariffs")
+        .find(cityFilter).project(PROJECTION).limit(100).toArray();
     }
 
     // Strategy 3: cross-city only if allowed (search only, NOT map)
@@ -783,7 +792,8 @@ async function startServer() {
         { serviceNameNorm: { $regex: w, $options: "i" } },
         { clinicName: { $regex: w, $options: "i" } },
       ]);
-      items = await db.collection("rawTariffs").find({ $or: crossClauses }).limit(100).toArray();
+      items = await db.collection("rawTariffs")
+        .find({ $or: crossClauses }).project(PROJECTION).limit(50).toArray();
       fromOtherCities = items.length > 0;
     }
 

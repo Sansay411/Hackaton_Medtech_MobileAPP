@@ -14,21 +14,36 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── MongoDB ────────────────────────────────────────────────────────────
-let _db = null, _client = null;
+// ── MongoDB (pre-connect at module load) ───────────────────────────────
+let _db = null, _client = null, _connecting = null;
+
+// Start connecting IMMEDIATELY — don't wait for first request
+_connecting = (async () => {
+  const uri = process.env.MONGODB_URI || "";
+  if (!uri) return;
+  try {
+    _client = new MongoClient(uri, {
+      maxPoolSize: 5,
+      minPoolSize: 1,
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000,
+      socketTimeoutMS: 10000,
+    });
+    await _client.connect();
+    _db = _client.db();
+    // Warm up — run a cheap query
+    await _db.collection("rawTariffs").findOne({}, { projection: { _id: 1 } });
+    console.log("[MongoDB] Connected and warmed up");
+  } catch (e) {
+    console.error("[MongoDB] Connection failed:", e.message);
+  }
+})();
+
 async function getDb() {
   if (_db) return _db;
-  const uri = process.env.MONGODB_URI || "";
-  if (!uri) throw new Error("MONGODB_URI not configured");
-  _client = new MongoClient(uri, {
-    tls: true,
-    tlsAllowInvalidCertificates: false,
-    serverSelectionTimeoutMS: 10000,
-    connectTimeoutMS: 10000,
-  });
-  await _client.connect();
-  _db = _client.db();
-  return _db;
+  if (_connecting) await _connecting;
+  if (_db) return _db;
+  throw new Error("MongoDB unavailable");
 }
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -77,6 +92,13 @@ async function searchRawTariffs(query, city, allowCrossCity) {
   const canonicalCity = dbCities.find(c => c.toLowerCase() === city.toLowerCase()) || city;
   const cityFilter = { city: canonicalCity };
 
+  // Only fetch fields we actually use
+  const PROJECTION = {
+    clinicId: 1, clinicName: 1, city: 1, address: 1, phone: 1,
+    serviceNameRaw: 1, serviceNameNorm: 1, priceKzt: 1,
+    osmsEligible: 1, parsedAt: 1, lat: 1, lng: 1, sourceUrl: 1,
+  };
+
   let items = [];
   const orClauses = searchWords.flatMap(w => [
     { serviceNameRaw: { $regex: w, $options: "i" } },
@@ -84,21 +106,28 @@ async function searchRawTariffs(query, city, allowCrossCity) {
     { clinicName: { $regex: w, $options: "i" } },
     { address: { $regex: w, $options: "i" } },
   ]);
-  items = await db.collection("rawTariffs").find({ ...cityFilter, $or: orClauses }).limit(300).toArray();
+  items = await db.collection("rawTariffs")
+    .find({ ...cityFilter, $or: orClauses })
+    .project(PROJECTION)
+    .limit(150)
+    .toArray();
 
   if (items.length < 8 && searchWords.some(w => w.length > 4)) {
     const prefixClauses = searchWords.filter(w => w.length > 4).flatMap(w => {
       const p = w.substring(0, Math.max(3, w.length - 2));
       return [{ serviceNameRaw: { $regex: p, $options: "i" } }, { serviceNameNorm: { $regex: p, $options: "i" } }, { clinicName: { $regex: p, $options: "i" } }];
     });
-    const more = await db.collection("rawTariffs").find({ ...cityFilter, $or: prefixClauses }).limit(200).toArray();
+    const more = await db.collection("rawTariffs")
+      .find({ ...cityFilter, $or: prefixClauses })
+      .project(PROJECTION).limit(100).toArray();
     const seen = new Set(items.map(r => r._id?.toString()));
     for (const it of more) { if (!seen.has(it._id?.toString())) { items.push(it); seen.add(it._id?.toString()); } }
   }
 
   let fromOther = false;
   if (items.length === 0 && allowCrossCity && searchWords.length > 0) {
-    items = await db.collection("rawTariffs").find({ $or: orClauses }).limit(100).toArray();
+    items = await db.collection("rawTariffs")
+      .find({ $or: orClauses }).project(PROJECTION).limit(50).toArray();
     fromOther = items.length > 0;
   }
   return { items, fromOtherCities: fromOther };
