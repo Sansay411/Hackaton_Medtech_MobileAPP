@@ -8,87 +8,220 @@
 
 <div align="center">
   <br />
-  <img src="https://img.shields.io/badge/Stack-TypeScript%20%7C%20React%20%7C%20Node.js-blue?style=for-the-badge" alt="Stack" />
-  <img src="https://img.shields.io/badge/Styles-Tailwind%20CSS-sky?style=for-the-badge" alt="Tailwind" />
-  <img src="https://img.shields.io/badge/Database-Firebase%20Firestore-orange?style=for-the-badge" alt="Firebase" />
-  <img src="https://img.shields.io/badge/AI-Google%20GenAI%20%7C%20Alem%20LLM-violet?style=for-the-badge" alt="AI" />
+  <img src="https://img.shields.io/badge/Стек-TypeScript%20%7C%20React%20%7C%20Node.js-blue?style=for-the-badge" alt="Стек" />
+  <img src="https://img.shields.io/badge/Стили-Tailwind%20CSS-sky?style=for-the-badge" alt="Tailwind" />
+  <img src="https://img.shields.io/badge/База%20данных-MongoDB%20Atlas-green?style=for-the-badge" alt="MongoDB" />
+  <img src="https://img.shields.io/badge/Карты-2GIS%20MapGL-orange?style=for-the-badge" alt="2GIS" />
+  <img src="https://img.shields.io/badge/Парсер-Firecrawl%20AI-red?style=for-the-badge" alt="Firecrawl" />
 </div>
 
 ---
 
-## 🌐 Language / Язык
+## 📋 О проекте
 
-Looking for the Russian version of this documentation?
-👉 **[Читать документацию на русском языке](#русская-версия)**
+**MedTariff.kz** — веб-платформа для поиска, сравнения и мониторинга цен на медицинские услуги в клиниках Казахстана. Система автоматически собирает данные из открытых источников (сайты лабораторий, агрегаторы, API), нормализует названия услуг по единому справочнику и предоставляет пациенту удобный интерфейс для выбора клиники по цене, местоположению и наличию страховки ОСМС.
 
----
+### Проблема, которую решаем
+Пациенты тратят часы на поиск цен по разрозненным сайтам клиник, PDF-прайсам и запутанным прейскурантам. MedTariff.kz автоматизирует сбор данных, приводит все цены к единому формату, показывает на карте ближайшие клиники и позволяет сравнить услуги за пару кликов.
 
-## 📝 Overview
-
-**MedTariff.kz** is a widescreen B2C web platform designed to analyze, parse, and aggregate medical tariffs and price lists from clinics across Kazakhstan. It connects patients with standard Ministry of Health (МЗ РК) clinical codes, monitors real-time price drops, and aggregates medical service comparisons.
-
-### Key Philosophy
-Patients shouldn't spend hours searching through nested PDFs and chaotic price sheets. MedTariff.kz automates data crawling, parses raw sheets with Gemini AI models, maps them to standard codes, and notifies users when target pricing is met.
-
-### How It Works:
-1. **Headless Crawler**: The background parser crawls active clinic websites and retrieves raw service names and prices.
-2. **AI Mapping**: Raw entries are evaluated against standard МЗ РК codes using Gemini & Alem AI.
-3. **Queue Normalization**: Unresolved items are routed to the administrator's review queue with confidence scores.
-4. **Widescreen Patient Hub**: Patients can search, compare, bookmark, and subscribe to price drops from a unified widescreen dashboard.
-5. **CMS & Digest**: Dynamic medical blogs and lifehacks targets are managed directly by admins.
+### Как это работает
+1. **Парсер** обходит сайты клиник и собирает названия услуг и цены
+2. **Нормализация** приводит разрозненные названия к единому справочнику (ОАК = общий анализ крови)
+3. **Умный поиск** находит клиники даже по сокращениям (МРТ → томография, ОАК → анализ крови)
+4. **Карта** показывает маркеры клиник с ценами, адресами и маршрутами
+5. **Сравнение** позволяет выбрать лучшую клинику по цене, расстоянию и ОСМС
 
 ---
 
-## 📂 Repository Structure
+## 🎯 Функциональные возможности
 
-| Directory / File | Technology | Description |
-| :--- | :--- | :--- |
-| `src/components/AdminHub.tsx` | TSX / React | Light-themed administrator dashboard containing parser controls, catalog, unmatched queue, subscriptions, and CMS. |
-| `src/App.tsx` | TSX / React | Widescreen 3-column patient application with onboarding flow, map markers, clinic cards, and price alert drawers. |
-| `server.ts` | Node.js / Express | Server-side script handling crawled sources, local regex fallbacks, and Express routes. |
-| `src/data/servicesCatalog.ts` | TypeScript | Core database of МЗ РК clinical service classifications and synonym tags. |
-| `src/lib/firebase.ts` | Firebase Web SDK | Database initialization, credentials, and rule settings for Firestore. |
+### Для пациента
+- **Поиск услуг** — умный поиск с автодополнением и синонимами (ОАК → общий анализ крови)
+- **Фильтры** — по городу, цене, категории, наличию ОСМС
+- **Карта клиник** — маркеры с ценами, логотипами и рейтингом, построение маршрута через 2GIS
+- **Сравнение** — таблица сравнения нескольких клиник по цене и услугам
+- **Карточка клиники** — все услуги, адрес, телефон, рейтинг, дата обновления цен
+- **Запись на приём** — форма записи к врачу с выбором даты и времени
+- **Подписки на снижение цен** — уведомление при падении цены ниже порога
+
+### Для администратора
+- **Панель управления** — админ-панель на `/admin`
+- **Управление источниками** — 37 источников с возможностью включить/отключить, добавить, удалить
+- **Запуск парсера** — ручной запуск для любого источника с логами в реальном времени
+- **Нормализация услуг** — сопоставление сырых названий со справочником (ручная + AI)
+- **Журнал ошибок** — логирование сбоев парсинга с указанием источника и причины
+- **Блог/CMS** — создание и редактирование статей с AI-генерацией обложек
 
 ---
 
-## 🚀 How to Run
+## 🏗 Архитектура системы
 
-### Prerequisites
-- Node.js (v18 or higher)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    MedTariff.kz                              │
+├─────────────┬───────────────┬──────────────┬────────────────┤
+│  React SPA  │  Express API  │  Parser      │  MongoDB       │
+│  (Vite+TW)  │  (tsx)        │  Engine      │  Atlas         │
+│  :5173      │  :3000        │  13 providers│  3470 записей  │
+├─────────────┴───────────────┴──────────────┴────────────────┤
+│                       37 источников                          │
+│  KDL (API) · Invitro (HTML) · TopDoc (HTML) · 2GIS (API)   │
+│  GovClinic · Firecrawl (AI)                                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Ключевые компоненты
+
+| Компонент | Технология | Назначение |
+|:---|:---|:---|
+| Фронтенд | React 19 + Vite + Tailwind | Интерфейс поиска, карты, сравнения |
+| Бэкенд | Express.js + tsx | API-маршруты, поиск, интеграция с БД |
+| Парсер | Strategy Pattern, 13 провайдеров | Сбор данных с сайтов клиник |
+| База данных | MongoDB Atlas | Хранение тарифов, логов, конфигов |
+| Карты | 2GIS MapGL API | Отображение клиник с маршрутами |
+| Умный поиск | Medical Synonym Engine | Синонимы: ОАК → анализ крови, МРТ → томография |
+| Нормализация | Rule-based + DeepSeek AI | Привязка услуг к справочнику |
+| Деплой | Vercel (SPA + Serverless Functions) | Продакшен-хостинг |
+
+---
+
+## 📂 Структура проекта
+
+| Путь | Технология | Описание |
+|:---|:---|:---|
+| `src/App.tsx` | React | Основное приложение — поиск, карта, сравнение |
+| `src/components/AdminHub.tsx` | React | Админ-панель управления парсером и БД |
+| `src/components/SourcesManager.tsx` | React | Управление 37 источниками парсинга |
+| `src/components/MapPlaceholder.tsx` | React | Карта с маркерами на 2GIS MapGL |
+| `server.ts` | Express | Серверная логика — поиск, API, парсер |
+| `api/index.js` | Express (Vercel) | Serverless-функции для Vercel |
+| `src/parser/parserEngine.ts` | TypeScript | Движок парсера с Mutex-блокировкой |
+| `src/parser/providers/` | TypeScript | 13 провайдеров (KDL, Invitro, Firecrawl...) |
+| `src/parser/deduplicator.ts` | TypeScript | SHA-256 дедупликация записей |
+| `src/parser/normalizer.ts` | TypeScript | Нормализация названий услуг |
+| `src/parser/sources.ts` | TypeScript | Реестр 37 источников данных |
+| `src/data/servicesCatalog.ts` | TypeScript | Справочник услуг с синонимами |
+
+---
+
+## 🚀 Запуск проекта
+
+### Требования
+- Node.js (v18 или выше)
 - npm
+- Доступ к MongoDB Atlas (или локальный MongoDB)
 
-### 1. Install dependencies
+### 1. Установка зависимостей
 ```bash
 npm install
 ```
 
-### 2. Configure Environment Variables
-Create a `.env` file in the root directory:
+### 2. Настройка переменных окружения
+Создайте файл `.env` в корне проекта:
 ```env
-GEMINI_API_KEY=your-gemini-key
-ALEM_API_KEY=your-alem-key
+MONGODB_URI=mongodb+srv://...@cluster0.mongodb.net/test
+FIRECRAWL_API_KEY=fc-... (опционально, для парсера)
+DEEPSEEK_API_KEY=sk-... (опционально, для нормализации)
 ```
 
-### 3. Start Development Server
+### 3. Запуск сервера разработки
 ```bash
 npm run dev
 ```
-Open **`http://localhost:3000`** in your browser.
-Open **`http://localhost:3000/admin`** to access the Admin Panel.
+
+Откройте **`http://localhost:3000`** в браузере.
+Админ-панель: **`http://localhost:3000/admin`**
+
+### 4. Сборка для продакшена
+```bash
+npm run build
+npm start
+```
 
 ---
 
-## <a name="русская-версия"></a>🇷🇺 Русская версия
+## 🔧 Парсеры
 
-**MedTariff.kz** — это веб-платформа для поиска, сравнения и агрегации цен на медицинские услуги в клиниках Казахстана. Решение объединяет парсинг прайс-листов с помощью ИИ (Gemini/Alem), классификацию услуг по кодам МЗ РК и личный кабинет пациента с умным мониторингом.
+Система использует **стратегию (Strategy Pattern)** для гибкого подключения источников данных.
 
-### Основные фичи:
-- **Широкоэкранный дашборд 3-в-1**: Удобная навигация, интерактивная карта с гео-маркерами цен, и каталог клиник.
-- **Подписки на снижение цен**: Пациенты могут выбрать услугу и подписаться на уведомления при падении тарифа ниже указанного порога.
-- **Очередь разметки ИИ**: Нераспознанные строки автоматически сопоставляются с кодами МЗ РК при помощи моделей Gemini с расчетом уверенности (confidence score).
-- **Дайджест и статьи**: CMS-блог с ИИ-генерацией обложек статей.
+### Активные источники
 
-### Запуск проекта:
-1. Установите зависимости: `npm install`
-2. Настройте API-ключи в `.env`.
-3. Запустите dev-сервер: `npm run dev`
+| Провайдер | Источников | Города | Формат | Статус |
+|:---|:---|:---|:---|:---|
+| KdlProvider | 3 | Алматы, Астана, Шымкент | REST API | ✅ |
+| InvitroProvider | 4 | Алматы, Астана, Караганда, Шымкент | HTML | ✅ |
+| TopdocProvider | 3 | Алматы, Астана | HTML | ✅ |
+| DgisProvider | 4 | Алматы, Астана, Караганда, Шымкент | API | ✅ |
+| FirecrawlProvider | 7 | Алматы (универсальный) | HTML+JS | ✅ |
+| GovClinicProvider | 6 | Алматы, Астана, Караганда | Встроенные данные | ✅ |
+
+### Недоступные сайты
+Следующие источники указаны в ТЗ, но их сайты недоступны (SSL ошибки, таймауты, домены продаются): Helix, Olymp, MedEl, Aksai Clinic, MCK, DoQ (цены не найдены).
+
+---
+
+## 🧠 Умный поиск
+
+Поиск поддерживает медицинские синонимы и сокращения:
+
+| Ввод пользователя | Что ищется |
+|:---|:---|
+| ОАК | общий анализ крови, CBC, гемоглобин |
+| УЗИ | ультразвук, эхография, сонография |
+| МРТ | магнитно-резонансная томография, томограф |
+| ПЦР | полимеразная цепная реакция, ДНК, РНК |
+| ЭКГ | электрокардиограмма, сердце |
+| биохимия | биохимический анализ крови, БАК |
+
+Поиск работает по 4 полям: название услуги, нормализованное название, название клиники, адрес.
+
+---
+
+## 🗺 Демо-сценарий
+
+```
+Мама с дочкой приехали в Алматы, нужно срочно сдать кровь.
+
+1. Открывает medtariff.vercel.app
+2. Пишет "ОАК" → 8 клиник с ценами
+3. Выбирает "Городская поликлиника №1" — бесплатно по ОСМС
+4. Нажимает "Сравнить" → таблица сравнения
+5. Выбирает клинику → "Запись" → форма записи
+6. Переключает на карту → кликает маркер → "Маршрут"
+7. Мама с дочкой довольны ❤️
+```
+
+---
+
+## 🛠 Технологический стек
+
+| Категория | Технологии |
+|:---|:---|
+| Язык | TypeScript |
+| Фронтенд | React 19, Vite, Tailwind CSS, Lucide Icons |
+| Бэкенд | Express.js, tsx |
+| База данных | MongoDB Atlas, Mongoose |
+| Карты | 2GIS MapGL API, 2GIS Directions API |
+| Парсеры | Playwright, Cheerio, Axios, Firecrawl |
+| AI | DeepSeek API, Google Gemini |
+| Деплой | Vercel (SPA + Serverless Functions) |
+| CI/CD | GitHub → Vercel (авто-деплой) |
+
+---
+
+## 📊 Статус проекта (финал хакатона)
+
+- **База данных**: 3470 записей, 100% с ценами
+- **Источники**: 37 (25 активных)
+- **Города**: Алматы, Астана, Караганда, Шымкент
+- **Госбольницы с ОСМС**: 6 клиник, 48 услуг (бесплатно)
+- **Умный поиск**: 25+ медицинских синонимов
+- **Время ответа**: 1.2–1.5 секунды
+- **TypeScript**: 0 ошибок компиляции
+- **Vercel**: `https://medtariff.vercel.app`
+
+---
+
+## 📄 Лицензия
+
+Проект разработан в рамках хакатона MedTech. Команда 132.
