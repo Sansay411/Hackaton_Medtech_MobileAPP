@@ -87,6 +87,8 @@ export class ParserEngine {
           parsedAt: result.parsedAt,
           isActive: true,
           dataHash: "",
+          lat: tariff.lat,
+          lng: tariff.lng,
         };
 
         const saved = await this.localDataLayer.saveRawRecord(record);

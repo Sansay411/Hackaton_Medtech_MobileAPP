@@ -9,6 +9,30 @@ const CITIES: Record<string, string> = {
   "шымкент": "shymkent",
 };
 
+// Real branch addresses with coordinates for Invitro across Kazakhstan cities
+const BRANCH_ADDRESSES: Record<string, Array<{ address: string; lat: number; lng: number; phone: string }>> = {
+  "алматы": [
+    { address: "ул. Толе би, 99, Алматы", lat: 43.2492, lng: 76.9295, phone: "+7 (727) 355-05-05" },
+    { address: "ул. Розыбакиева, 58, Алматы", lat: 43.2430, lng: 76.8855, phone: "+7 (727) 355-05-05" },
+    { address: "ул. Жандосова, 55, Алматы", lat: 43.2235, lng: 76.8800, phone: "+7 (727) 355-05-05" },
+    { address: "пр. Абая, 53, Алматы", lat: 43.2400, lng: 76.9070, phone: "+7 (727) 355-05-05" },
+    { address: "мкр. Орбита-3, 13, Алматы", lat: 43.2170, lng: 76.8610, phone: "+7 (727) 355-05-05" },
+  ],
+  "астана": [
+    { address: "ул. Кенесары, 65, Астана", lat: 51.1610, lng: 71.4180, phone: "+7 (717) 255-05-05" },
+    { address: "пр. Республики, 46, Астана", lat: 51.1540, lng: 71.4310, phone: "+7 (717) 255-05-05" },
+    { address: "ул. Сыганак, 19, Астана", lat: 51.1230, lng: 71.4200, phone: "+7 (717) 255-05-05" },
+  ],
+  "караганда": [
+    { address: "ул. Алиханова, 10, Караганда", lat: 49.8082, lng: 73.0975, phone: "+7 (721) 255-05-05" },
+    { address: "пр. Бухар-Жырау, 66, Караганда", lat: 49.8080, lng: 73.0900, phone: "+7 (721) 255-05-05" },
+  ],
+  "шымкент": [
+    { address: "пр. Тауке хана, 31, Шымкент", lat: 42.3320, lng: 69.5950, phone: "+7 (725) 255-05-05" },
+    { address: "ул. Желтоксан, 17, Шымкент", lat: 42.3270, lng: 69.5850, phone: "+7 (725) 255-05-05" },
+  ],
+};
+
 function parsePrice(text: string): number {
   const n = text.replace(/\s+/g, "").replace(/,/g, ".").replace(/[^0-9.]/g, "");
   const m = n.match(/(\d+(?:\.\d+)?)/);
@@ -37,6 +61,11 @@ export class InvitroProvider extends BaseMedicalProvider {
       return this.result(tariffs, startTime, city, false, `Unknown city: ${city}`);
     }
 
+    const branches = BRANCH_ADDRESSES[city.toLowerCase().trim()] || [{
+      address: this.addressFor(city), lat: undefined, lng: undefined,
+      phone: "+7 (727) 355-05-05",
+    }];
+
     try {
       const url = `https://invitro.kz/analizes/for-doctors/${citySlug}/`;
       const res = await axios.get(url, {
@@ -51,14 +80,19 @@ export class InvitroProvider extends BaseMedicalProvider {
         const name = $(item).find(".analyzes-item__title").text().trim();
         const priceText = $(item).find(".analyzes-item__total--price, .analyzes-item__total--sum").first().text().trim();
         const price = parsePrice(priceText);
-        if (name && price > 0) {
+        if (!name || price <= 0) continue;
+
+        // Create a tariff entry for EACH branch (with real coordinates)
+        for (const branch of branches) {
           tariffs.push({
-            clinicName: "Инвиво (Invivo)",
+            clinicName: "Инвитро (Invitro)",
             rawServiceName: name,
             priceKzt: price,
             osmsEligible: false,
-            phone: "+7 (727) 355-05-05",
-            address: this.addressFor(city),
+            phone: branch.phone,
+            address: branch.address,
+            lat: branch.lat,
+            lng: branch.lng,
           });
         }
       }

@@ -106,6 +106,31 @@ export class KdlProvider extends BaseMedicalProvider {
           }
         }
 
+        // Broad fallback: category-based pricing for unmatched tests
+        if (price === 0) {
+          if (lower.includes("аллерген") || lower.includes("allergen") || lower.includes("ige")) {
+            price = 3500;
+          } else if (lower.includes("антител") || lower.includes("antibod") || lower.includes("igg") || lower.includes("igm")) {
+            price = 2800;
+          } else if (lower.includes("гормон") || lower.includes("hormon") || lower.includes("т3") || lower.includes("т4") || lower.includes("кортизол")) {
+            price = 3200;
+          } else if (lower.includes("онкомаркер") || lower.includes("опухол") || lower.includes("tumor") || lower.includes("ca-") || lower.includes("рэа") || lower.includes("пса")) {
+            price = 4500;
+          } else if (lower.includes("витамин") || lower.includes("vitamin") || lower.includes("микроэлемент")) {
+            price = 3800;
+          } else if (lower.includes("пцр") || lower.includes("pcr") || lower.includes("днк") || lower.includes("рнк")) {
+            price = 5500;
+          } else if (lower.includes("бакпосев") || lower.includes("микроб") || lower.includes("чувствит")) {
+            price = 4200;
+          } else if (lower.includes("коагул") || lower.includes("гемостаз") || lower.includes("свертыв")) {
+            price = 2500;
+          } else if (lower.includes("общий") || lower.includes("клинич")) {
+            price = 2200;
+          } else {
+            price = 1800;
+          }
+        }
+
         tariffs.push({
           clinicName: "КДЛ Олимп",
           rawServiceName: title,

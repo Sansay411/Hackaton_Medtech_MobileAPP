@@ -1,5 +1,4 @@
-/** Local JSON file storage — fallback when Firestore is not available. */
-
+/** Local storage — saves to JSON + MongoDB */
 import fs from "fs";
 import path from "path";
 import { RawTariffRecord, ParserRunLog, ParserError } from "./types";
@@ -105,5 +104,39 @@ export class LocalDataLayer {
     return records.filter(
       r => r.clinicName === clinicName && r.city === city && new Date(r.parsedAt).getTime() > dayAgo
     );
+  }
+
+  async bootstrapJsonToMongo(): Promise<{ readCount: number; insertedCount: number; skippedCount: number }> {
+    const records = readJson<RawTariffRecord>("rawTariffs.json");
+    const { getDb } = await import("../lib/mongodb");
+    const db = await getDb();
+
+    const readCount = records.length;
+    let insertedCount = 0;
+    let skippedCount = 0;
+
+    const existingHashes = new Set(
+      (await db.collection("rawTariffs").find({}, { projection: { dataHash: 1 } }).toArray())
+        .map((doc: any) => doc.dataHash)
+        .filter(Boolean)
+    );
+
+    const toInsert: RawTariffRecord[] = [];
+    for (const record of records) {
+      if (!record.dataHash) record.dataHash = computeDataHash(record);
+      if (existingHashes.has(record.dataHash)) { skippedCount++; continue; }
+      existingHashes.add(record.dataHash);
+      if (!record.id) record.id = `raw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      toInsert.push(record);
+      insertedCount++;
+    }
+
+    if (toInsert.length > 0) {
+      const chunkSize = 500;
+      for (let i = 0; i < toInsert.length; i += chunkSize) {
+        await db.collection("rawTariffs").insertMany(toInsert.slice(i, i + chunkSize));
+      }
+    }
+    return { readCount, insertedCount, skippedCount };
   }
 }

@@ -15,6 +15,8 @@ export interface IngestionResult {
     osmsEligible: boolean;
     phone?: string;
     address?: string;
+    lat?: number;
+    lng?: number;
   }>;
   telemetry: {
     ingestDurationMs: number;

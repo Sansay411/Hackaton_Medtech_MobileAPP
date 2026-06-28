@@ -3938,18 +3938,7 @@ export default function App() {
               )}
             </button>
 
-            {/* Tab 3: Техническая часть (Админ) */}
-            <button
-              onClick={() => {
-                window.open("/admin", "_blank");
-              }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer text-slate-400 hover:text-slate-600 relative"
-            >
-              <Database className="w-4.5 h-4.5 shrink-0" />
-              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            </button>
-
-            {/* Tab 4: Блог */}
+            {/* Tab 3: Блог */}
             <button
               onClick={() => {
                 setActiveTab("blog");

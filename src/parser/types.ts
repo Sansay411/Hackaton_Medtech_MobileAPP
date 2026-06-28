@@ -20,6 +20,8 @@ export interface RawTariffRecord {
   parsedAt: string;
   isActive: boolean;
   dataHash: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface SourceConfig {

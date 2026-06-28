@@ -727,7 +727,100 @@ async function startServer() {
     }
   }
 
-  // API Route: AI-powered medical services search with googleSearch grounding
+  // =====================================================
+  // SHARED SEARCH ENGINE — exact city, multi-strategy, used by both search & map
+  // =====================================================
+  async function searchRawTariffs(query: string, city: string, allowCrossCity: boolean): Promise<{ items: any[]; fromOtherCities: boolean }> {
+    const { getDb } = await import("./src/lib/mongodb");
+    const db = await getDb();
+
+    const rawWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const words = rawWords.filter((w: string) => w.length >= 2);
+    const searchWords = words.length > 0 ? words : rawWords;
+
+    // EXACT city match — find the canonical city name in DB
+    const dbCities = await db.collection("rawTariffs").distinct("city");
+    const canonicalCity = dbCities.find((c: string) => c.toLowerCase() === city.toLowerCase()) || city;
+    const cityFilter = { city: canonicalCity };
+
+    let items: any[] = [];
+
+    if (searchWords.length > 0) {
+      // Strategy 1: OR across 4 fields, exact city
+      const orClauses = searchWords.flatMap((w: string) => [
+        { serviceNameRaw: { $regex: w, $options: "i" } },
+        { serviceNameNorm: { $regex: w, $options: "i" } },
+        { clinicName: { $regex: w, $options: "i" } },
+        { address: { $regex: w, $options: "i" } },
+      ]);
+      items = await db.collection("rawTariffs").find({ ...cityFilter, $or: orClauses }).limit(300).toArray();
+
+      // Strategy 2: prefix matching, same city
+      if (items.length < 8 && searchWords.some(w => w.length > 4)) {
+        const prefixClauses = searchWords.filter(w => w.length > 4).flatMap((w: string) => {
+          const prefix = w.substring(0, Math.max(3, w.length - 2));
+          return [
+            { serviceNameRaw: { $regex: prefix, $options: "i" } },
+            { serviceNameNorm: { $regex: prefix, $options: "i" } },
+            { clinicName: { $regex: prefix, $options: "i" } },
+          ];
+        });
+        const more = await db.collection("rawTariffs").find({ ...cityFilter, $or: prefixClauses }).limit(200).toArray();
+        const seenIds = new Set(items.map((r: any) => r._id?.toString()));
+        for (const item of more) {
+          if (!seenIds.has(item._id?.toString())) { items.push(item); seenIds.add(item._id?.toString()); }
+        }
+      }
+    } else {
+      items = await db.collection("rawTariffs").find(cityFilter).limit(300).toArray();
+    }
+
+    // Strategy 3: cross-city only if allowed (search only, NOT map)
+    let fromOtherCities = false;
+    if (items.length === 0 && allowCrossCity && searchWords.length > 0) {
+      const crossClauses = searchWords.flatMap((w: string) => [
+        { serviceNameRaw: { $regex: w, $options: "i" } },
+        { serviceNameNorm: { $regex: w, $options: "i" } },
+        { clinicName: { $regex: w, $options: "i" } },
+      ]);
+      items = await db.collection("rawTariffs").find({ $or: crossClauses }).limit(100).toArray();
+      fromOtherCities = items.length > 0;
+    }
+
+    // JSON fallback
+    if (items.length === 0) {
+      try {
+        const filePath = path.join(process.cwd(), "data", "parser", "rawTariffs.json");
+        if (fs.existsSync(filePath)) {
+          const rawJson = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+          if (Array.isArray(rawJson)) {
+            items = rawJson.filter((item: any) => {
+              if (item.city && item.city.toLowerCase() !== city.toLowerCase()) return false;
+              if (searchWords.length === 0) return true;
+              return searchWords.some((w: string) =>
+                (item.serviceNameRaw || "").toLowerCase().includes(w) ||
+                (item.serviceNameNorm || "").toLowerCase().includes(w) ||
+                (item.clinicName || "").toLowerCase().includes(w)
+              );
+            });
+          }
+        }
+      } catch (jsonErr) { console.warn("[Search] JSON fallback failed:", jsonErr); }
+    }
+
+    return { items, fromOtherCities };
+  }
+
+  // Normalize clinic name (merge variants)
+  function normalizeClinicName(name: string): string {
+    const lower = name.toLowerCase().trim();
+    if (lower.includes("инвитро") || lower.includes("invitro") || lower.includes("инвиво") || lower.includes("invivo")) return "Инвитро (Invitro)";
+    if (lower.includes("олимп") || lower.includes("olymp") || lower.includes("кдл")) return "КДЛ Олимп";
+    if (lower.includes("сункар") || lower.includes("sunkar")) return "Сункар";
+    return name.trim();
+  }
+
+  // API Route: AI-powered medical services search
   app.post("/api/search-services", async (req, res) => {
     try {
       const { query, city = "Алматы" } = req.body;
@@ -738,33 +831,21 @@ async function startServer() {
       const { getDb } = await import("./src/lib/mongodb");
       const db = await getDb();
 
-      // Split query into keywords
-      const rawWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-      const words = rawWords.filter((w: string) => w.length >= 2);
-      const searchWords = words.length > 0 ? words : rawWords;
+      const { items: rawItems, fromOtherCities } = await searchRawTariffs(query, city, true);
 
-      let filter: any = { city: { $regex: new RegExp(`^${city}$`, "i") } };
-      if (searchWords.length > 0) {
-        filter.$or = searchWords.map((w: string) => ({
-          $or: [
-            { serviceNameRaw: { $regex: w, $options: "i" } },
-            { serviceNameNorm: { $regex: w, $options: "i" } }
-          ]
-        })).flat();
-      }
-
-      const rawItems = await db.collection("rawTariffs").find(filter).toArray();
       if (rawItems.length === 0) {
-        return res.json(getSimulatedServices(query, city));
+        return res.json({
+          insights: `По вашему запросу "${query}" в г. ${city} ничего не найдено.`,
+          clinics: [],
+          isSimulated: false,
+        });
       }
 
-      // Group rawItems by clinicName
+      // Group rawItems by normalized clinicName (uses shared normalizeClinicName above)
       const groupedMap = new Map<string, any[]>();
       for (const item of rawItems) {
-        const key = item.clinicName.trim();
-        if (!groupedMap.has(key)) {
-          groupedMap.set(key, []);
-        }
+        const key = normalizeClinicName(item.clinicName);
+        if (!groupedMap.has(key)) groupedMap.set(key, []);
         groupedMap.get(key)!.push(item);
       }
 
@@ -773,43 +854,53 @@ async function startServer() {
       try {
         const logos = await db.collection("clinicLogos").find({}).toArray();
         for (const logo of logos) {
-          if (logo.name && logo.logoUrl) {
-            logoMap.set(logo.name.toLowerCase().trim(), logo.logoUrl);
-          }
+          const n = normalizeClinicName(logo.clinicName || logo.name || "");
+          if (logo.logoUrl) logoMap.set(n.toLowerCase(), logo.logoUrl);
         }
         const clinicsColl = await db.collection("clinics").find({}).toArray();
         for (const cl of clinicsColl) {
-          if (cl.name && cl.logoUrl) {
-            logoMap.set(cl.name.toLowerCase().trim(), cl.logoUrl);
-          }
+          const n = normalizeClinicName(cl.name || "");
+          if (cl.logoUrl) logoMap.set(n.toLowerCase(), cl.logoUrl);
         }
-      } catch (logoErr) {
-        console.warn("Failed to fetch logos:", logoErr);
-      }
+      } catch (logoErr) { console.warn("Failed to fetch logos:", logoErr); }
 
       const clinicsList: any[] = [];
+      const seenNames = new Set<string>();
       let idx = 0;
       for (const [clinicName, items] of groupedMap.entries()) {
+        if (seenNames.has(clinicName.toLowerCase())) continue;
+        seenNames.add(clinicName.toLowerCase());
         idx++;
         const firstItem = items[0];
-        const prices = items.map(item => item.priceKzt).filter(p => typeof p === 'number');
+        const prices = items.map((it: any) => it.priceKzt).filter((p: any) => typeof p === "number" && p > 0);
         const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
-        const osms = items.some(item => item.osmsEligible);
-        const logoUrl = logoMap.get(clinicName.toLowerCase().trim()) || "";
+        const osms = items.some((it: any) => it.osmsEligible);
+        const logoUrl = logoMap.get(clinicName.toLowerCase()) || "";
+
+        // Best coordinates (closest to city center)
+        const cityCenter = CITY_CENTERS[city.toLowerCase().trim()] || CITY_CENTERS["алматы"];
+        let bestItem = firstItem;
+        let bestDist = Infinity;
+        for (const it of items) {
+          if (it.lat && it.lng) {
+            const d = Math.abs(it.lat - cityCenter.lat) + Math.abs(it.lng - cityCenter.lng);
+            if (d < bestDist) { bestDist = d; bestItem = it; }
+          }
+        }
 
         clinicsList.push({
-          id: firstItem.clinicId || `clinic-${idx}-${clinicName.toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")}`,
+          id: bestItem.clinicId || `clinic-${idx}-${clinicName.toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")}`,
           name: clinicName,
           price: minPrice,
-          address: firstItem.address || "Адрес не указан",
-          district: "", 
-          distance: getDistanceStr(firstItem.lat, firstItem.lng, city),
+          address: bestItem.address || "Адрес не указан",
+          district: "",
+          distance: getDistanceStr(bestItem.lat, bestItem.lng, city),
           osms,
-          updated: getUpdatedStr(firstItem.parsedAt),
-          phone: firstItem.phone || "Телефон не указан",
+          updated: getUpdatedStr(bestItem.parsedAt),
+          phone: bestItem.phone || "Телефон не указан",
           rating: 4.5,
-          lat: firstItem.lat,
-          lng: firstItem.lng,
+          lat: bestItem.lat,
+          lng: bestItem.lng,
           logoUrl,
           services: items.map(it => ({
             serviceNameRaw: it.serviceNameRaw,
@@ -835,7 +926,7 @@ async function startServer() {
       });
     } catch (error) {
       console.error("Search API failed:", error);
-      return res.json(getSimulatedServices(req.body.query, req.body.city || "Алматы"));
+      return res.json({ insights: "Поиск временно недоступен", clinics: [], isSimulated: false });
     }
   });
 
@@ -850,33 +941,18 @@ async function startServer() {
       const { getDb } = await import("./src/lib/mongodb");
       const db = await getDb();
 
-      // Split query into keywords
-      const rawWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-      const words = rawWords.filter((w: string) => w.length >= 2);
-      const searchWords = words.length > 0 ? words : rawWords;
+      // Use shared search — NO cross-city fallback for map!
+      const { items: rawItems } = await searchRawTariffs(query, city, false);
 
-      let filter: any = { city: { $regex: new RegExp(`^${city}$`, "i") } };
-      if (searchWords.length > 0) {
-        filter.$or = searchWords.map((w: string) => ({
-          $or: [
-            { serviceNameRaw: { $regex: w, $options: "i" } },
-            { serviceNameNorm: { $regex: w, $options: "i" } }
-          ]
-        })).flat();
-      }
-
-      const rawItems = await db.collection("rawTariffs").find(filter).toArray();
       if (rawItems.length === 0) {
-        return res.json(getSimulatedMapMarkers(query, city));
+        return res.json({ markers: [], isSimulated: false });
       }
 
-      // Group locations by clinicName
+      // Group locations by normalized clinic name (uses shared normalizeClinicName above)
       const groupedMap = new Map<string, any[]>();
       for (const item of rawItems) {
-        const key = item.clinicName.trim();
-        if (!groupedMap.has(key)) {
-          groupedMap.set(key, []);
-        }
+        const key = normalizeClinicName(item.clinicName);
+        if (!groupedMap.has(key)) groupedMap.set(key, []);
         groupedMap.get(key)!.push(item);
       }
 
@@ -885,52 +961,68 @@ async function startServer() {
       try {
         const logos = await db.collection("clinicLogos").find({}).toArray();
         for (const logo of logos) {
+          if (logo.clinicName && logo.logoUrl) {
+            logoMap.set(normalizeClinicName(logo.clinicName), logo.logoUrl);
+          }
           if (logo.name && logo.logoUrl) {
-            logoMap.set(logo.name.toLowerCase().trim(), logo.logoUrl);
+            logoMap.set(normalizeClinicName(logo.name), logo.logoUrl);
           }
         }
         const clinicsColl = await db.collection("clinics").find({}).toArray();
         for (const cl of clinicsColl) {
           if (cl.name && cl.logoUrl) {
-            logoMap.set(cl.name.toLowerCase().trim(), cl.logoUrl);
+            logoMap.set(normalizeClinicName(cl.name), cl.logoUrl);
           }
         }
-      } catch (logoErr) {
-        console.warn("Failed to fetch logos:", logoErr);
-      }
+      } catch (logoErr) { console.warn("Failed to fetch logos:", logoErr); }
 
       const markersList: any[] = [];
+      const seenNames = new Set<string>();
       let idx = 0;
       const cityCenter = CITY_CENTERS[city.toLowerCase().trim()] || CITY_CENTERS["алматы"];
 
       for (const [clinicName, items] of groupedMap.entries()) {
+        if (seenNames.has(clinicName.toLowerCase())) continue;
+        seenNames.add(clinicName.toLowerCase());
         idx++;
-        const firstItem = items[0];
-        const prices = items.map(item => item.priceKzt).filter(p => typeof p === 'number');
+
+        // Pick the item with best coordinates (closest to city center)
+        let bestItem = items[0];
+        let bestDist = Infinity;
+        for (const it of items) {
+          if (it.lat && it.lng) {
+            const d = Math.abs(it.lat - cityCenter.lat) + Math.abs(it.lng - cityCenter.lng);
+            if (d < bestDist) { bestDist = d; bestItem = it; }
+          }
+        }
+
+        // Validate: reject coords > 1.5 degrees from city center
+        const coordOk = bestItem.lat && bestItem.lng
+          && Math.abs(bestItem.lat - cityCenter.lat) < 1.5
+          && Math.abs(bestItem.lng - cityCenter.lng) < 1.5;
+
+        const prices = items.map((it: any) => it.priceKzt).filter((p: any) => typeof p === "number" && p > 0);
         const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
-        const osms = items.some(item => item.osmsEligible);
-        const logoUrl = logoMap.get(clinicName.toLowerCase().trim()) || "";
+        const osms = items.some((it: any) => it.osmsEligible);
+        const logoUrl = logoMap.get(normalizeClinicName(clinicName)) || "";
 
         markersList.push({
-          id: firstItem.clinicId || `marker-${idx}-${clinicName.toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")}`,
+          id: `marker-${idx}-${clinicName.toLowerCase().replace(/[^a-zа-яё0-9]/g, "-")}`,
           name: clinicName,
           price: minPrice,
-          lat: firstItem.lat || cityCenter.lat,
-          lng: firstItem.lng || cityCenter.lng,
-          address: firstItem.address || "Адрес не указан",
+          lat: coordOk ? bestItem.lat : cityCenter.lat,
+          lng: coordOk ? bestItem.lng : cityCenter.lng,
+          address: bestItem.address || "Адрес не указан",
           osms,
           rating: 4.5,
-          logoUrl
+          logoUrl,
         });
       }
 
-      return res.json({
-        markers: markersList,
-        isSimulated: false
-      });
+      return res.json({ markers: markersList, isSimulated: false });
     } catch (error) {
       console.error("Map Grounding failed:", error);
-      return res.json(getSimulatedMapMarkers(req.body.query, req.body.city || "Алматы"));
+      return res.json({ markers: [], isSimulated: false });
     }
   });
 
@@ -1496,6 +1588,119 @@ ${cleanedText}
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // GET /api/parser/sources — List all source configs with stats
+  app.get("/api/parser/sources", async (_req, res) => {
+    const sources = await Promise.all(PARSER_SOURCES.map(async (s: any) => {
+      let recordCount = 0;
+      let lastRun = null;
+      if (s.isActive) {
+        try {
+          const { getDb } = await import("./src/lib/mongodb");
+          const db = await getDb();
+          // Get un-geocoded count by city and by provider name match
+          const providerKeyword = s.providerClass.replace(/Provider$/, '').toLowerCase();
+          if (s.url) {
+            const urlHost = s.url.replace(/^https?:\/\//, '').split('/')[0];
+            recordCount = await db.collection("rawTariffs").countDocuments({
+              city: { $regex: new RegExp(s.city, "i") },
+              sourceUrl: { $regex: urlHost, $options: "i" },
+            });
+          }
+          if (recordCount === 0 && providerKeyword) {
+            // Match by clinic name containing provider keyword
+            recordCount = await db.collection("rawTariffs").countDocuments({
+              city: { $regex: new RegExp(s.city, "i") },
+              $or: [
+                { clinicName: { $regex: providerKeyword, $options: "i" } },
+                { sourceUrl: { $regex: providerKeyword, $options: "i" } },
+              ],
+            });
+          }
+        } catch {}
+        try {
+          const { getDb } = await import("./src/lib/mongodb");
+          const db = await getDb();
+          const log = await db.collection("runLogs").findOne({ sourceId: s.id }, { sort: { startedAt: -1 } });
+          if (log) lastRun = log.completedAt || log.startedAt;
+        } catch {}
+      }
+      return {
+        id: s.id, name: s.name, url: s.url, city: s.city,
+        format: s.format, isActive: s.isActive,
+        description: s.description || "",
+        status: s.status || (s.isActive ? "unknown" : "disabled"),
+        recordCount, lastRun,
+      };
+    }));
+    res.json({ sources });
+  });
+
+  // GET /api/parser/raw-tariffs — Get raw tariff records
+  app.get("/api/parser/raw-tariffs", async (req, res) => {
+    try {
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+      const city = req.query.city as string | undefined;
+      const query: any = {};
+      if (city) query.city = { $regex: new RegExp(city, "i") };
+      const records = await db.collection("rawTariffs").find(query).limit(500).toArray();
+      res.json({ records, total: records.length });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // GET /api/parser/run-logs — Get parser run history
+  app.get("/api/parser/run-logs", async (req, res) => {
+    try {
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+      const logs = await db.collection("runLogs").find().sort({ startedAt: -1 }).limit(Number(req.query.limit) || 50).toArray();
+      res.json({ logs });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // POST /api/parser/run-source — Run a single source by ID
+  app.post("/api/parser/run-source", async (req, res) => {
+    try {
+      const { sourceId } = req.body;
+      if (!sourceId) return res.status(400).json({ error: "sourceId required" });
+      const { ParserEngine } = await import("./src/parser/parserEngine");
+      const engine = new ParserEngine();
+      const result = await engine.runSourceById(sourceId);
+      if (!result) return res.status(404).json({ error: "Source not found" });
+      res.json({ success: true, result });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // POST /api/parser/bootstrap-mongo — Bootstrap JSON data to MongoDB
+  app.post("/api/parser/bootstrap-mongo", async (_req, res) => {
+    try {
+      const { LocalDataLayer } = await import("./src/parser/localDataLayer");
+      const layer = new LocalDataLayer();
+      const stats = await layer.bootstrapJsonToMongo();
+      res.json({ success: true, message: "JSON → MongoDB bootstrap complete.", ...stats });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
+  });
+
+  // GET /api/parser/last-run — Get last successful parse timestamp
+  app.get("/api/parser/last-run", async (_req, res) => {
+    try {
+      const { getDb } = await import("./src/lib/mongodb");
+      const db = await getDb();
+      const lastLog = await db.collection("runLogs").findOne(
+        { isSuccessful: true },
+        { sort: { startedAt: -1 } }
+      );
+      if (lastLog) {
+        return res.json({ success: true, timestamp: lastLog.startedAt || lastLog.completedAt });
+      }
+      const lastTariff = await db.collection("rawTariffs").findOne(
+        { parsedAt: { $exists: true } },
+        { sort: { parsedAt: -1 } }
+      );
+      res.json({ success: true, timestamp: lastTariff?.parsedAt || new Date().toISOString() });
+    } catch (err: any) { res.status(500).json({ error: err.message }); }
   });
 
   // =====================================================
