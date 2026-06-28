@@ -1,5 +1,6 @@
-// MedTariff.kz — Vercel Serverless API
-const express = require("express");
+// MedTariff.kz — Vercel Serverless API (ESM)
+import express from "express";
+import { MongoClient } from "mongodb";
 const app = express();
 app.use(express.json());
 
@@ -17,7 +18,6 @@ app.use((req, res, next) => {
 let _db = null, _client = null;
 async function getDb() {
   if (_db) return _db;
-  const { MongoClient } = require("mongodb");
   _client = new MongoClient(process.env.MONGODB_URI || "");
   await _client.connect();
   _db = _client.db();
@@ -245,4 +245,4 @@ app.post("/api/db/:collection", async (req, res) => {
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok", ts: new Date().toISOString() }));
 
-module.exports = app;
+export default app;

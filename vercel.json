@@ -4,7 +4,7 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.cjs?path=$1" },
+    { "source": "/api/(.*)", "destination": "/api/index?path=$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
