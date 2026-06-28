@@ -316,43 +316,22 @@ export default function MapPlaceholder({
       let routePolyline: any = null;
       let destroyed = false;
 
-      // Try 2GIS Routing API for real road route
+      // OSRM open-source routing engine — real roads, no API key, no rate limits
       const fetchRoute = async () => {
         try {
-          const dgKey = "26c65059-f062-4a91-a973-b8a38fedf562";
-          const resp = await fetch(
-            `https://routing.api.2gis.com/carrouting/6.0.0/global?key=${dgKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                points: [
-                  { lat: fromLat, lon: fromLng },
-                  { lat: toLat, lon: toLng },
-                ],
-                type: "car",
-                locale: "ru_RU",
-              }),
-            }
-          );
-
-          if (!resp.ok && resp.status === 429) throw new Error("rate_limit");
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
+          const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?steps=false&geometries=geojson&overview=full&language=ru`;
+          const resp = await fetch(osrmUrl);
           const data = await resp.json();
-          // 2GIS routes response: data.result[0].geometry → array of [lat, lng]
-          const route = data?.result?.[0];
-          if (route?.geometry?.length > 2) {
-            // Convert geometry from [lat,lng] to [lng,lat] for 2GIS MapGL
-            const coords = route.geometry.map((pt: number[]) => [pt[1], pt[0]]);
-            const totalKm = (route.total_distance || route.distance || 0) / 1000;
-            const totalMin = Math.round((route.total_duration || route.duration || 0) / 60);
 
-            if (!destroyed) {
-              setRouteStats({
-                distance: `${totalKm.toFixed(1)} км`,
-                duration: `${totalMin} мин`,
-              });
+          if (data.code === "Ok" && data.routes?.[0]) {
+            const route = data.routes[0];
+            // OSRM returns coordinates as [lng, lat] — directly usable by 2GIS MapGL
+            const coords = route.geometry?.coordinates;
+            const totalKm = route.distance / 1000;
+            const totalMin = Math.round(route.duration / 60);
+
+            if (coords?.length > 2 && !destroyed) {
+              setRouteStats({ distance: `${totalKm.toFixed(1)} км`, duration: `${totalMin} мин` });
               const mapgl = (window as any).mapgl;
               if (mapgl) {
                 if (activeRouteRef.current) { try { (activeRouteRef.current as any).destroy(); } catch {} }
@@ -362,36 +341,34 @@ export default function MapPlaceholder({
                   width: 5,
                   opacity: 0.85,
                   dashLength: 0,
-                  arrow: true,
                 });
                 activeRouteRef.current = routePolyline;
               }
+              return;
             }
-            return;
           }
         } catch (e: any) {
-          if (e.message === "rate_limit") console.warn("[Map] 2GIS routing rate limit, using geodesic fallback");
-          else console.warn("[Map] 2GIS routing failed:", e.message);
+          console.warn("[Map] OSRM routing error:", e.message);
         }
 
-        // Fallback: geodesic straight line
+        // Fallback: geodesic straight line (dashed)
         if (!destroyed) {
           const R = 6371;
           const dLat = (toLat - fromLat) * Math.PI / 180;
           const dLon = (toLng - fromLng) * Math.PI / 180;
           const a = Math.sin(dLat/2)**2 + Math.cos(fromLat*Math.PI/180) * Math.cos(toLat*Math.PI/180) * Math.sin(dLon/2)**2;
           const distKm = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          setRouteStats({ distance: `${distKm.toFixed(1)} км`, duration: `${Math.round(distKm * 15)} мин` });
+          setRouteStats({ distance: `${distKm.toFixed(1)} км (по прямой)`, duration: `${Math.round(distKm * 15)} мин` });
 
           const mapgl = (window as any).mapgl;
           if (mapgl) {
             if (activeRouteRef.current) { try { (activeRouteRef.current as any).destroy(); } catch {} }
             routePolyline = new mapgl.Polyline(mapInstance, {
               coordinates: [[fromLng, fromLat], [toLng, toLat]],
-              color: "#3b82f6",
-              width: 4,
-              opacity: 0.8,
-              dashLength: 6,
+              color: "#94a3b8",
+              width: 3,
+              opacity: 0.6,
+              dashLength: 8,
             });
             activeRouteRef.current = routePolyline;
           }
