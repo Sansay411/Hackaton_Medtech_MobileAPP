@@ -41,9 +41,21 @@ _connecting = (async () => {
 
 async function getDb() {
   if (_db) return _db;
-  if (_connecting) await _connecting;
-  if (_db) return _db;
-  throw new Error("MongoDB unavailable");
+  // Retry connection if first attempt failed (IP whitelist may have been added since)
+  try {
+    const uri = process.env.MONGODB_URI || "";
+    if (!uri) throw new Error("MONGODB_URI not configured");
+    _client = new MongoClient(uri, {
+      maxPoolSize: 5, minPoolSize: 1,
+      serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000, socketTimeoutMS: 10000,
+    });
+    await _client.connect();
+    _db = _client.db();
+    console.log("[MongoDB] Connected on retry");
+  } catch (e) {
+    throw new Error("MongoDB unavailable: " + e.message);
+  }
+  return _db;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────
