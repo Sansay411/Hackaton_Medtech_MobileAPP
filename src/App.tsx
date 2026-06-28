@@ -3899,11 +3899,11 @@ export default function App() {
         </div>
 
         {/* ========================================== */}
+        {/* Фиксированная адаптивная панель вкладок для всех мобильных устройств */}
         <div 
-          className="absolute left-0 right-0 px-2 z-40 select-none pointer-events-none"
-          style={{ bottom: "calc(16px + env(safe-area-inset-bottom))" }}
+          className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2 z-50 select-none pointer-events-none"
         >
-          <div className="bg-white/85 backdrop-blur-lg border border-slate-200/50 shadow-lg px-4 py-2 rounded-full flex justify-between items-center pointer-events-auto max-w-[380px] mx-auto gap-0.5">
+          <div className="bg-white/90 backdrop-blur-xl border border-slate-200/80 shadow-2xl px-3 py-2.5 rounded-[2rem] flex justify-around items-center pointer-events-auto w-full gap-1 shadow-blue-900/5">
             
             {/* Tab 1: Поиск / Главная */}
             <button
@@ -3911,14 +3911,14 @@ export default function App() {
                 setActiveTab("search");
                 setSelectedClinic(null);
               }}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-full transition-all duration-300 cursor-pointer ${
                 activeTab === "search" 
-                  ? "bg-indigo-600/10 text-indigo-700 font-extrabold" 
+                  ? "bg-blue-600/10 text-blue-700 font-extrabold scale-105" 
                   : "text-slate-400 hover:text-slate-600"
               }`}
             >
-              <Compass className="w-4.5 h-4.5 shrink-0" />
-              {activeTab === "search" && <span className="text-[9px] uppercase tracking-wider font-black">Главная</span>}
+              <Compass className="w-5 h-5 shrink-0" />
+              {activeTab === "search" && <span className="text-[10px] uppercase tracking-wider font-black">Главная</span>}
             </button>
 
             {/* Tab 2: Сравнение */}
@@ -3927,16 +3927,16 @@ export default function App() {
                 setActiveTab("compare");
                 setSelectedClinic(null);
               }}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer relative ${
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-full transition-all duration-300 cursor-pointer relative ${
                 activeTab === "compare" 
-                  ? "bg-indigo-600/10 text-indigo-700 font-extrabold" 
+                  ? "bg-blue-600/10 text-blue-700 font-extrabold scale-105" 
                   : "text-slate-400 hover:text-slate-600"
               }`}
             >
-              <GitCompare className="w-4.5 h-4.5 shrink-0" />
-              {activeTab === "compare" && <span className="text-[9px] uppercase tracking-wider font-black">Сравнение</span>}
+              <GitCompare className="w-5 h-5 shrink-0" />
+              {activeTab === "compare" && <span className="text-[10px] uppercase tracking-wider font-black">Сравнение</span>}
               {selectedCompareIds.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
+                <span className="absolute -top-1.5 -right-1 bg-blue-600 text-white text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-xs">
                   {selectedCompareIds.length}
                 </span>
               )}
@@ -3948,31 +3948,31 @@ export default function App() {
                 setActiveTab("blog");
                 setSelectedClinic(null);
               }}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer relative ${
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-full transition-all duration-300 cursor-pointer relative ${
                 activeTab === "blog" 
-                  ? "bg-indigo-600/10 text-indigo-700 font-extrabold" 
+                  ? "bg-blue-600/10 text-blue-700 font-extrabold scale-105" 
                   : "text-slate-400 hover:text-slate-600"
               }`}
             >
-              <BookOpen className="w-4.5 h-4.5 shrink-0" />
-              {activeTab === "blog" && <span className="text-[9px] uppercase tracking-wider font-black">Блог</span>}
-              <span className="absolute top-1 right-2 w-1.5 h-1.5 rounded-full bg-indigo-600" />
+              <BookOpen className="w-5 h-5 shrink-0" />
+              {activeTab === "blog" && <span className="text-[10px] uppercase tracking-wider font-black">Блог</span>}
+              <span className="absolute top-1.5 right-3 w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
             </button>
 
-            {/* Tab 5: Профиль */}
+            {/* Tab 4: Профиль */}
             <button
               onClick={() => {
                 setActiveTab("profile");
                 setSelectedClinic(null);
               }}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-full transition-all duration-300 cursor-pointer ${
                 activeTab === "profile" 
-                  ? "bg-indigo-600/10 text-indigo-700 font-extrabold" 
+                  ? "bg-blue-600/10 text-blue-700 font-extrabold scale-105" 
                   : "text-slate-400 hover:text-slate-600"
               }`}
             >
-              <UserIcon className="w-4.5 h-4.5 shrink-0" />
-              {activeTab === "profile" && <span className="text-[9px] uppercase tracking-wider font-black">Профиль</span>}
+              <UserIcon className="w-5 h-5 shrink-0" />
+              {activeTab === "profile" && <span className="text-[10px] uppercase tracking-wider font-black">Профиль</span>}
             </button>
 
           </div>

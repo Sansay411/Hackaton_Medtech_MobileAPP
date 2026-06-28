@@ -1368,9 +1368,9 @@ ${cleanedText}
         if (!assistantMessage) throw new Error("Empty response from Alem LLM");
         cleanJson = assistantMessage.trim();
       } else if (geminiClient) {
-        console.log("[Parse] Using Gemini-3.5-flash parser backend");
+        console.log("[Parse] Using Gemini-2.5-flash parser backend");
         const response = await geminiClient.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.5-flash",
           contents: prompt,
           config: {
             responseMimeType: "application/json"
