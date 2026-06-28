@@ -1138,5 +1138,17 @@
     "recordsUnmatched": 0,
     "errorCount": 0,
     "isSuccessful": false
+  },
+  {
+    "sourceId": "invitro-karaganda",
+    "startedAt": "2026-06-28T09:16:32.875Z",
+    "completedAt": "2026-06-28T09:17:04.689Z",
+    "durationMs": 31814,
+    "recordsExtracted": 1000,
+    "recordsNew": 0,
+    "recordsNormalized": 0,
+    "recordsUnmatched": 0,
+    "errorCount": 0,
+    "isSuccessful": true
   }
 ]

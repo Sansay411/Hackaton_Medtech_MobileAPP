@@ -909,8 +909,8 @@ async function startServer() {
           updated: getUpdatedStr(bestItem.parsedAt),
           phone: bestItem.phone || "Телефон не указан",
           rating: 4.5,
-          lat: bestItem.lat,
-          lng: bestItem.lng,
+          lat: bestItem.lat || cityCenter.lat + (Math.random() - 0.5) * 0.02,
+          lng: bestItem.lng || cityCenter.lng + (Math.random() - 0.5) * 0.02,
           logoUrl,
           services: items.map(it => ({
             serviceNameRaw: it.serviceNameRaw,

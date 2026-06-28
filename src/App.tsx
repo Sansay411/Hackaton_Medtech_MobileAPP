@@ -601,7 +601,7 @@ export default function App() {
   // Initial lookup on onboarding completion
   useEffect(() => {
     if (onboarding.isCompleted) {
-      const initialMapQuery = onboarding.intent === "Лаборатория" ? "ПЦР" : onboarding.intent;
+      const initialMapQuery = onboarding.intent === "Лаборатория" ? "УЗИ" : onboarding.intent;
       setSearchQuery(initialMapQuery);
       executeSearch(initialMapQuery, onboarding.city);
     }
